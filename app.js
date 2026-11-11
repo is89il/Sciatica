@@ -12,6 +12,10 @@ const AREAS = [
   { id: 'left', name: 'Left leg', color: 'var(--left)' },
   { id: 'back', name: 'Lower back', color: 'var(--back)' },
 ];
+const SYMPTOMS = [
+  'Numbness', 'Tingling / pins & needles', 'Leg weakness', 'Burning', 'Muscle cramps / spasms',
+  'Pain below the knee', 'Morning stiffness', 'Worse when sitting', 'Poor sleep',
+];
 
 /* ---------- Helpers ---------- */
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -31,11 +35,17 @@ const fmtDate = (iso, opts = { weekday: 'short', day: 'numeric', month: 'short' 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* ---------- Storage ---------- */
-function emptyData() { return { version: 1, entries: {}, appointments: [] }; }
+function emptyData() { return { version: 2, entries: {}, appointments: [], meds: [], exercises: [] }; }
+function migrate(d) {
+  d.meds = Array.isArray(d.meds) ? d.meds : [];
+  d.exercises = Array.isArray(d.exercises) ? d.exercises : [];
+  d.version = 2;
+  return d;
+}
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (d && d.entries && Array.isArray(d.appointments)) return d;
+    if (d && d.entries && Array.isArray(d.appointments)) return migrate(d);
   } catch (e) { /* ignore */ }
   return emptyData();
 }
@@ -67,7 +77,15 @@ function pruneEntry(date) {
     const v = e[s.id];
     if (v && AREAS.every((a) => v[a.id] == null) && !v.note) delete e[s.id];
   }
-  if (!e.note && SLOTS.every((s) => !e[s.id])) delete data.entries[date];
+  if (e.meds && !e.meds.length) delete e.meds;
+  if (e.exercises) {
+    for (const k of Object.keys(e.exercises)) if (!e.exercises[k]) delete e.exercises[k];
+    if (!Object.keys(e.exercises).length) delete e.exercises;
+  }
+  if (e.symptoms && !e.symptoms.length) delete e.symptoms;
+  for (const k of ['exNote', 'symptomNote']) if (k in e && !e[k]) delete e[k];
+  const keys = Object.keys(e).filter((k) => k !== 'note');
+  if (!e.note && !keys.length) delete data.entries[date];
 }
 
 /* ---------- Navigation ---------- */
@@ -77,6 +95,7 @@ function showView(name) {
   if (name === 'overview') renderOverview();
   if (name === 'appts') renderAppointments();
   if (name === 'log') renderLog();
+  if (name === 'settings') renderManageLists();
   window.scrollTo(0, 0);
 }
 $$('.tabs button').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
@@ -119,7 +138,180 @@ function renderLog() {
   }).join('');
 
   $('#day-note').value = entry.note || '';
+  renderMedsCard(entry);
+  renderExCard(entry);
+  renderSymCard(entry);
 }
+
+/* ---------- Medication (log) ---------- */
+const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const doseLabel = (m) => [m.dose, m.unit].filter(Boolean).join(' ');
+function logDose(med) {
+  const e = getEntry(currentDate, true);
+  e.meds = e.meds || [];
+  e.meds.push({ id: uid(), medId: med.id, name: med.name, dose: med.dose || '', unit: med.unit || '', time: currentDate === todayISO() ? nowTime() : '' });
+  e.meds.sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  save();
+}
+function renderMedsCard(entry) {
+  const active = data.meds.filter((m) => m.active !== false);
+  const taken = entry.meds || [];
+  $('#meds-card').innerHTML = `<div class="slot-head"><h3>💊 Medication</h3><span class="hint">${taken.length ? taken.length + ' dose' + (taken.length > 1 ? 's' : '') : ''}</span></div>
+    <div class="quick">${active.map((m) => `<button data-med="${m.id}">+ ${esc(m.name)}${m.dose ? ' ' + esc(doseLabel(m)) : ''}</button>`).join('')}
+      <button class="add" data-newmed>+ New medication</button></div>
+    ${taken.length ? taken.map((t) => `<div class="intake" data-intake="${t.id}">
+        <span>${esc(t.name)}</span>
+        <input value="${esc(t.dose)}" data-f="dose" inputmode="decimal" aria-label="Dose" placeholder="dose">
+        <input type="time" value="${esc(t.time)}" data-f="time" aria-label="Time">
+        <button class="x" data-rm aria-label="Remove">✕</button></div>`).join('')
+      : '<div class="empty-sm">Nothing logged. Tap a medication above when you take it.</div>'}`;
+}
+$('#meds-card').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.dataset.med) { logDose(data.meds.find((m) => m.id === b.dataset.med)); renderLog(); }
+  else if ('newmed' in b.dataset) openMed(null, true);
+  else if ('rm' in b.dataset) {
+    const e = getEntry(currentDate); const id = b.closest('[data-intake]').dataset.intake;
+    e.meds = e.meds.filter((t) => t.id !== id);
+    pruneEntry(currentDate); save(); renderLog();
+  }
+});
+$('#meds-card').addEventListener('change', (ev) => {
+  const f = ev.target.dataset.f; if (!f) return;
+  const id = ev.target.closest('[data-intake]').dataset.intake;
+  const t = getEntry(currentDate).meds.find((x) => x.id === id);
+  t[f] = ev.target.value.trim();
+  if (f === 'time') getEntry(currentDate).meds.sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
+  save();
+});
+
+/* ---------- Exercises (log) ---------- */
+function renderExCard(entry) {
+  const done = entry.exercises || {};
+  // show active exercises + any retired ones that were done on this day
+  const list = data.exercises.filter((x) => x.active !== false || done[x.id]);
+  $('#ex-card').innerHTML = `<div class="slot-head"><h3>🏃 Home exercises</h3><button class="copy-prev" data-newex>+ New</button></div>
+    ${list.length ? list.map((x) => {
+      const n = done[x.id] || 0; const target = Number(x.target) || 1;
+      return `<div class="ex-row ${n >= target ? 'done' : ''}" data-ex="${x.id}">
+        <div class="info"><b>${esc(x.name)}</b><div class="muted">${esc(x.detail || '')}${x.target ? `${x.detail ? ' · ' : ''}${x.target}× per day` : ''}</div></div>
+        <div class="counter"><button data-d="-1" aria-label="Less">−</button><span>${n}${x.target ? '/' + x.target : ''}</span><button data-d="1" aria-label="More">+</button></div>
+      </div>`;
+    }).join('') : '<div class="empty-sm">Add the exercises your physio gave you, then tap + each time you do a session.</div>'}
+    <div class="slot-note"><textarea rows="1" placeholder="How did the exercises feel? (optional)" data-exnote>${esc(entry.exNote || '')}</textarea></div>`;
+}
+$('#ex-card').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if ('newex' in b.dataset) return openEx(null);
+  if (!b.dataset.d) return;
+  const id = b.closest('[data-ex]').dataset.ex;
+  const e = getEntry(currentDate, true); e.exercises = e.exercises || {};
+  e.exercises[id] = Math.max(0, (e.exercises[id] || 0) + Number(b.dataset.d));
+  pruneEntry(currentDate); save(); renderLog();
+});
+$('#ex-card').addEventListener('input', (ev) => {
+  if (!('exnote' in ev.target.dataset)) return;
+  getEntry(currentDate, true).exNote = ev.target.value;
+  pruneEntry(currentDate); save();
+});
+
+/* ---------- Symptoms (log) ---------- */
+function renderSymCard(entry) {
+  const on = new Set(entry.symptoms || []);
+  $('#sym-card').innerHTML = `<div class="slot-head"><h3>⚡ Other symptoms</h3></div>
+    <div class="chips">${SYMPTOMS.map((sy) => `<button class="chip ${on.has(sy) ? 'on' : ''}" data-sym="${esc(sy)}">${esc(sy)}</button>`).join('')}</div>
+    <textarea rows="2" placeholder="Describe: where (e.g. right foot, outer calf), when, how long…" data-symnote>${esc(entry.symptomNote || '')}</textarea>`;
+}
+$('#sym-card').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-sym]'); if (!b) return;
+  const e = getEntry(currentDate, true); const set = new Set(e.symptoms || []);
+  set.has(b.dataset.sym) ? set.delete(b.dataset.sym) : set.add(b.dataset.sym);
+  e.symptoms = SYMPTOMS.filter((x) => set.has(x));
+  pruneEntry(currentDate); save(); renderLog();
+});
+$('#sym-card').addEventListener('input', (ev) => {
+  if (!('symnote' in ev.target.dataset)) return;
+  getEntry(currentDate, true).symptomNote = ev.target.value;
+  pruneEntry(currentDate); save();
+});
+
+/* ---------- Manage medications & exercises (dialogs + settings lists) ---------- */
+const medDlg = $('#med-dialog'), medForm = $('#med-form');
+let editingMed = null, medFromLog = false;
+function openMed(id, fromLog = false) {
+  editingMed = id; medFromLog = fromLog;
+  const m = id ? data.meds.find((x) => x.id === id) : {};
+  medForm.reset();
+  $('#med-dialog-title').textContent = id ? 'Edit medication' : 'New medication';
+  $('#med-delete').style.display = id ? '' : 'none';
+  $('#med-log-now-wrap').style.display = fromLog ? '' : 'none';
+  for (const k of ['name', 'dose', 'unit', 'schedule']) medForm.elements[k].value = m[k] || '';
+  if (!id) medForm.elements.unit.value = 'mg';
+  medForm.elements.active.checked = m.active !== false;
+  medDlg.returnValue = '';
+  medDlg.showModal();
+}
+medDlg.addEventListener('close', () => {
+  if (medDlg.returnValue !== 'save') return;
+  const f = medForm.elements;
+  const rec = { id: editingMed || uid(), name: f.name.value.trim(), dose: f.dose.value.trim(), unit: f.unit.value.trim(), schedule: f.schedule.value.trim(), active: f.active.checked };
+  if (!rec.name) return;
+  const i = data.meds.findIndex((x) => x.id === rec.id);
+  if (i >= 0) data.meds[i] = rec; else data.meds.push(rec);
+  if (medFromLog && f.lognow.checked) logDose(rec);
+  save(); refreshActive();
+});
+$('#med-delete').addEventListener('click', () => {
+  if (!confirm('Delete this medication from your list? Doses already logged stay in your history. (Tip: untick "Currently taking" instead.)')) return;
+  data.meds = data.meds.filter((x) => x.id !== editingMed);
+  save(); medDlg.close('deleted'); refreshActive();
+});
+
+const exDlg = $('#ex-dialog'), exForm = $('#ex-form');
+let editingEx = null;
+function openEx(id) {
+  editingEx = id;
+  const x = id ? data.exercises.find((e) => e.id === id) : {};
+  exForm.reset();
+  $('#ex-dialog-title').textContent = id ? 'Edit exercise' : 'New home exercise';
+  $('#ex-delete').style.display = id ? '' : 'none';
+  for (const k of ['name', 'detail', 'target', 'notes']) exForm.elements[k].value = x[k] || '';
+  exForm.elements.active.checked = x.active !== false;
+  exDlg.returnValue = '';
+  exDlg.showModal();
+}
+exDlg.addEventListener('close', () => {
+  if (exDlg.returnValue !== 'save') return;
+  const f = exForm.elements;
+  const rec = { id: editingEx || uid(), name: f.name.value.trim(), detail: f.detail.value.trim(), target: f.target.value ? Number(f.target.value) : '', notes: f.notes.value.trim(), active: f.active.checked };
+  if (!rec.name) return;
+  const i = data.exercises.findIndex((x) => x.id === rec.id);
+  if (i >= 0) data.exercises[i] = rec; else data.exercises.push(rec);
+  save(); refreshActive();
+});
+$('#ex-delete').addEventListener('click', () => {
+  if (!confirm('Delete this exercise and its logged sessions? (Tip: untick "Currently doing" to keep the history.)')) return;
+  data.exercises = data.exercises.filter((x) => x.id !== editingEx);
+  for (const d of Object.keys(data.entries)) {
+    const e = data.entries[d];
+    if (e.exercises) { delete e.exercises[editingEx]; pruneEntry(d); }
+  }
+  save(); exDlg.close('deleted'); refreshActive();
+});
+
+function renderManageLists() {
+  const sortActive = (a, b) => (b.active !== false) - (a.active !== false) || a.name.localeCompare(b.name);
+  $('#med-list').innerHTML = data.meds.length ? [...data.meds].sort(sortActive).map((m) => `<div class="list-item ${m.active === false ? 'inactive' : ''}" data-id="${m.id}">
+      <div><b>${esc(m.name)}</b> ${esc(doseLabel(m))}<div class="muted">${esc(m.schedule || '')}${m.active === false ? ' (stopped)' : ''}</div></div><span class="muted">Edit ›</span></div>`).join('')
+    : '<div class="empty-sm">No medications yet.</div>';
+  $('#ex-list').innerHTML = data.exercises.length ? [...data.exercises].sort(sortActive).map((x) => `<div class="list-item ${x.active === false ? 'inactive' : ''}" data-id="${x.id}">
+      <div><b>${esc(x.name)}</b> <span class="muted">${esc(x.detail || '')}${x.target ? ' · ' + x.target + '×/day' : ''}</span><div class="muted">${esc(x.notes || '')}${x.active === false ? ' (retired)' : ''}</div></div><span class="muted">Edit ›</span></div>`).join('')
+    : '<div class="empty-sm">No exercises yet.</div>';
+}
+$('#med-list').addEventListener('click', (ev) => { const r = ev.target.closest('[data-id]'); if (r) openMed(r.dataset.id); });
+$('#ex-list').addEventListener('click', (ev) => { const r = ev.target.closest('[data-id]'); if (r) openEx(r.dataset.id); });
+$('#add-med').addEventListener('click', () => openMed(null));
+$('#add-ex').addEventListener('click', () => openEx(null));
 
 $('#slots').addEventListener('click', (ev) => {
   const btn = ev.target.closest('button');
@@ -174,6 +366,10 @@ function firstDate() {
   const all = [...Object.keys(data.entries), ...data.appointments.map((a) => a.date)].filter((d) => d <= todayISO()).sort();
   return all[0] || todayISO();
 }
+function hasPain(date) {
+  const e = data.entries[date];
+  return !!e && SLOTS.some((s) => e[s.id] && AREAS.some((a) => e[s.id][a.id] != null));
+}
 function periodMean(dates, area, metric) {
   return mean(dates.map((d) => dayValue(d, area, metric)).filter((v) => v != null));
 }
@@ -210,7 +406,61 @@ function renderOverview() {
   renderChart(dates);
   renderStats(dates);
   renderSlotTable(dates);
+  renderMedsOverview(dates);
+  renderExOverview(dates);
+  renderSymOverview(dates);
   renderHeatmap(dates);
+}
+
+function renderMedsOverview(dates) {
+  const by = new Map(); // key: med name
+  dates.forEach((d) => (data.entries[d]?.meds || []).forEach((t) => {
+    const k = t.medId || t.name;
+    const r = by.get(k) || { name: t.name, unit: t.unit, days: new Set(), doses: 0, total: 0, numeric: true };
+    r.days.add(d); r.doses++;
+    const n = parseFloat(String(t.dose).replace(',', '.'));
+    if (isNaN(n)) r.numeric = false; else r.total += n;
+    by.set(k, r);
+  }));
+  const n = dates.length;
+  $('#ov-meds').innerHTML = by.size ? [...by.values()].sort((a, b) => b.doses - a.doses).map((r) => `<div class="ov-row">
+      <div class="top"><b>${esc(r.name)}</b><span class="muted">${r.days.size} of ${n} days</span></div>
+      <div class="muted small">${r.doses} dose${r.doses > 1 ? 's' : ''}${r.numeric && r.total ? ` · avg ${+(r.total / r.days.size).toFixed(r.total / r.days.size >= 10 ? 0 : 1)} ${esc(r.unit || '')} on days taken` : ''}</div>
+      <div class="bar"><i style="width:${(r.days.size / n) * 100}%"></i></div></div>`).join('')
+    : '<div class="empty-sm">No medication logged in this period.</div>';
+}
+
+function renderExOverview(dates) {
+  const n = dates.length;
+  const list = data.exercises.filter((x) => x.active !== false || dates.some((d) => data.entries[d]?.exercises?.[x.id]));
+  $('#ov-ex').innerHTML = list.length ? list.map((x) => {
+    const counts = dates.map((d) => data.entries[d]?.exercises?.[x.id] || 0);
+    const days = counts.filter(Boolean).length;
+    const sessions = counts.reduce((a, b) => a + b, 0);
+    const target = Number(x.target) || 0;
+    const pct = target ? Math.min(100, (sessions / (target * n)) * 100) : (days / n) * 100;
+    return `<div class="ov-row">
+      <div class="top"><b>${esc(x.name)}</b><span class="muted">${days} of ${n} days</span></div>
+      <div class="muted small">${sessions} session${sessions === 1 ? '' : 's'}${target ? ` · ${Math.round(pct)}% of target (${target}×/day)` : ''}</div>
+      <div class="bar"><i style="width:${pct}%;background:#1a7f37"></i></div></div>`;
+  }).join('') : '<div class="empty-sm">No exercises set up yet. Add them in Settings or on the Log page.</div>';
+}
+
+function renderSymOverview(dates) {
+  const counts = new Map();
+  const notes = [];
+  dates.forEach((d) => {
+    const e = data.entries[d]; if (!e) return;
+    (e.symptoms || []).forEach((s) => counts.set(s, (counts.get(s) || 0) + 1));
+    if (e.symptomNote) notes.push([d, e.symptomNote]);
+  });
+  const n = dates.length;
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([s, c]) => `<div class="ov-row">
+      <div class="top"><b>${esc(s)}</b><span class="muted">${c} of ${n} days</span></div>
+      <div class="bar"><i style="width:${(c / n) * 100}%;background:var(--back)"></i></div></div>`).join('');
+  const recent = notes.slice(-5).reverse().map(([d, t]) => `<div class="ov-row"><span class="muted small">${fmtDate(d)}</span><br>${esc(t)}</div>`).join('');
+  $('#ov-sym').innerHTML = (rows || '<div class="empty-sm">No other symptoms logged in this period.</div>') +
+    (recent ? `<h3 style="margin-top:14px">Recent symptom notes</h3>${recent}` : '');
 }
 
 function renderChart(dates) {
@@ -254,7 +504,7 @@ function renderChart(dates) {
     svg += `<path d="${path}" fill="none" stroke="${a.color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
   });
   svg += '</svg>';
-  const hasData = dates.some((d) => data.entries[d]);
+  const hasData = dates.some(hasPain);
   $('#chart').innerHTML = hasData ? svg : '<div class="empty">No pain logged in this period yet.</div>';
   $('#legend').innerHTML = AREAS.map((a) => `<span><i style="background:${a.color}"></i>${a.name}</span>`).join('') +
     '<span class="muted">🗓 = appointment</span>';
@@ -263,7 +513,7 @@ function renderChart(dates) {
 function renderStats(dates) {
   let prev, label;
   if (range === 'all') {
-    const logged = dates.filter((d) => data.entries[d]);
+    const logged = dates.filter(hasPain);
     prev = logged.slice(0, 7);
     dates = logged.slice(-7);
     label = 'last 7 logged days vs first 7';
@@ -299,8 +549,19 @@ function renderHeatmap(dates) {
   $('#heatmap').innerHTML = `<div class="hm">${AREAS.map((a) => `<div>${a.name}</div><div class="hm-row" style="${cols}">${dates.map((d) => {
     const v = dayValue(d, a.id, metric);
     return `<div class="hm-cell ${apptDates.has(d) ? 'appt' : ''}" title="${fmtDate(d)}: ${fmt(v)}" style="${v != null ? `background:${painColor(v)}` : ''}"></div>`;
-  }).join('')}</div>`).join('')}</div>
-  <p class="muted small">Green = low pain, red = high. Outlined squares are appointment days.</p>`;
+  }).join('')}</div>`).join('')}
+  <div>Exercises</div><div class="hm-row" style="${cols}">${dates.map((d) => {
+    const ex = data.entries[d]?.exercises || {};
+    const sessions = Object.values(ex).reduce((a, b) => a + b, 0);
+    const target = data.exercises.filter((x) => x.active !== false).reduce((a, x) => a + (Number(x.target) || 1), 0) || 1;
+    const r = Math.min(1, sessions / target);
+    return `<div class="hm-cell" title="${fmtDate(d)}: ${sessions} exercise session(s)" style="${sessions ? `background:hsl(140 55% ${70 - r * 38}%)` : ''}"></div>`;
+  }).join('')}</div>
+  <div>Medication</div><div class="hm-row" style="${cols}">${dates.map((d) => {
+    const c = (data.entries[d]?.meds || []).length;
+    return `<div class="hm-cell" title="${fmtDate(d)}: ${c} dose(s)" style="${c ? `background:hsl(212 75% ${72 - Math.min(c, 5) * 8}%)` : ''}"></div>`;
+  }).join('')}</div></div>
+  <p class="muted small">Pain: green = low, red = high. Outlined squares are appointment days. Exercises: darker green = closer to your daily target. Medication: darker blue = more doses.</p>`;
 }
 
 /* ---------- Appointments ---------- */
@@ -380,8 +641,9 @@ $('#appt-delete').addEventListener('click', () => {
   refreshActive();
 });
 function refreshActive() {
+  // re-render the current view without jumping to the top
   const v = $('.view.active').id.replace('view-', '');
-  showView(v);
+  ({ log: renderLog, overview: renderOverview, appts: renderAppointments, settings: renderManageLists })[v]?.();
 }
 
 /* ---------- Settings: export / import ---------- */
@@ -396,13 +658,16 @@ $('#export-json').addEventListener('click', () =>
   download(`pain-tracker-backup-${todayISO()}.json`, JSON.stringify(data, null, 2), 'application/json'));
 $('#export-csv').addEventListener('click', () => {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const lines = ['date,time_of_day,right_leg,left_leg,lower_back,slot_note,day_note,appointments'];
+  const lines = ['date,time_of_day,right_leg,left_leg,lower_back,slot_note,day_note,appointments,medication,exercises,exercise_note,symptoms,symptom_note'];
+  const exName = (id) => data.exercises.find((x) => x.id === id)?.name || id;
   Object.keys(data.entries).sort().forEach((d) => {
     const e = data.entries[d];
     const appts = data.appointments.filter((a) => a.date === d).map((a) => `${a.type}${a.treatment ? ': ' + a.treatment : ''}`).join(' | ');
     SLOTS.forEach((s) => {
       const v = e[s.id] || {};
-      lines.push([d, s.id, v.right ?? '', v.left ?? '', v.back ?? '', q(v.note), q(e.note), q(appts)].join(','));
+      const meds = (e.meds || []).map((t) => `${t.time ? t.time + ' ' : ''}${t.name} ${[t.dose, t.unit].filter(Boolean).join(' ')}`.trim()).join(' | ');
+      const ex = Object.entries(e.exercises || {}).map(([id, c]) => `${exName(id)} x${c}`).join(' | ');
+      lines.push([d, s.id, v.right ?? '', v.left ?? '', v.back ?? '', q(v.note), q(e.note), q(appts), q(meds), q(ex), q(e.exNote), q((e.symptoms || []).join(' | ')), q(e.symptomNote)].join(','));
     });
   });
   download(`pain-log-${todayISO()}.csv`, lines.join('\n'), 'text/csv');
@@ -414,7 +679,7 @@ $('#import-json').addEventListener('change', async (ev) => {
     const d = JSON.parse(await file.text());
     if (!d.entries || !Array.isArray(d.appointments)) throw new Error('bad format');
     if (!confirm('Replace all current data with this backup?')) return;
-    data = d;
+    data = migrate(d);
     save();
     alert('Backup restored.');
   } catch (e) {

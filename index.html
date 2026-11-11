@@ -28,6 +28,9 @@
       </div>
       <div id="day-appts"></div>
       <div id="slots"></div>
+      <div class="card" id="meds-card"></div>
+      <div class="card" id="ex-card"></div>
+      <div class="card" id="sym-card"></div>
       <label class="card block">
         <span class="label">Notes for the day</span>
         <textarea id="day-note" rows="3" placeholder="Sleep, activity, medication, triggers…"></textarea>
@@ -59,6 +62,18 @@
         <div id="slot-table"></div>
       </div>
       <div class="card">
+        <h3>💊 Medication</h3>
+        <div id="ov-meds"></div>
+      </div>
+      <div class="card">
+        <h3>🏃 Home exercises</h3>
+        <div id="ov-ex"></div>
+      </div>
+      <div class="card">
+        <h3>⚡ Other symptoms</h3>
+        <div id="ov-sym"></div>
+      </div>
+      <div class="card">
         <h3>Daily heatmap</h3>
         <div id="heatmap"></div>
       </div>
@@ -72,6 +87,14 @@
 
     <!-- SETTINGS -->
     <section id="view-settings" class="view">
+      <div class="card">
+        <div class="slot-head"><h3>💊 My medications</h3><button class="copy-prev" id="add-med">+ Add</button></div>
+        <div id="med-list"></div>
+      </div>
+      <div class="card">
+        <div class="slot-head"><h3>🏃 My home exercises</h3><button class="copy-prev" id="add-ex">+ Add</button></div>
+        <div id="ex-list"></div>
+      </div>
       <div class="card">
         <h3>Backup</h3>
         <p class="muted">Your data is stored only on this device. Export a backup regularly, especially before clearing your browser.</p>
@@ -127,6 +150,44 @@
       <label>Notes<textarea name="notes" rows="2" placeholder="How it went, how you felt afterwards"></textarea></label>
       <div class="row end">
         <button type="button" class="danger" id="appt-delete">Delete</button>
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="med-dialog">
+    <form method="dialog" id="med-form">
+      <h3 id="med-dialog-title">Medication</h3>
+      <label>Name<input name="name" required placeholder="e.g. Ibuprofen, Pregabalin, Paracetamol"></label>
+      <div class="grid2">
+        <label>Usual dose<input name="dose" inputmode="decimal" placeholder="e.g. 400"></label>
+        <label>Unit<input name="unit" placeholder="mg" list="units"></label>
+      </div>
+      <datalist id="units"><option>mg</option><option>g</option><option>ml</option><option>tablet(s)</option><option>drops</option><option>patch</option></datalist>
+      <label>Schedule / instructions<input name="schedule" placeholder="e.g. 3× daily with food, max 1200 mg/day"></label>
+      <label class="check"><input type="checkbox" name="active" checked> Currently taking (untick when stopped — history is kept)</label>
+      <label class="check" id="med-log-now-wrap"><input type="checkbox" name="lognow" checked> Log a dose for this day now</label>
+      <div class="row end">
+        <button type="button" class="danger" id="med-delete">Delete</button>
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="ex-dialog">
+    <form method="dialog" id="ex-form">
+      <h3 id="ex-dialog-title">Home exercise</h3>
+      <label>Name<input name="name" required placeholder="e.g. Prone press-ups, Nerve flossing, Bird dog"></label>
+      <label>Sets / reps / hold<input name="detail" placeholder="e.g. 3×10, hold 5 s"></label>
+      <label>How often<input name="target" inputmode="numeric" type="number" min="1" max="10" placeholder="Times per day, e.g. 3"></label>
+      <label>Notes<input name="notes" placeholder="e.g. From physio 3 Nov — stop if pain moves down the leg"></label>
+      <label class="check"><input type="checkbox" name="active" checked> Currently doing (untick to retire — history is kept)</label>
+      <div class="row end">
+        <button type="button" class="danger" id="ex-delete">Delete</button>
         <span class="spacer"></span>
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save" class="primary">Save</button>
