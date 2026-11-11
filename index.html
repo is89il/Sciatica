@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pain Tracker</title>
+  <meta name="theme-color" content="#1f6feb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Pain Tracker">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Pain Tracker</h1>
+    <span class="sub">L5/S1 · sciatica</span>
+  </header>
+
+  <main>
+    <!-- LOG -->
+    <section id="view-log" class="view active">
+      <div class="datebar">
+        <button class="icon-btn" id="prev-day" aria-label="Previous day">‹</button>
+        <input type="date" id="log-date">
+        <button class="icon-btn" id="next-day" aria-label="Next day">›</button>
+      </div>
+      <div id="day-appts"></div>
+      <div id="slots"></div>
+      <label class="card block">
+        <span class="label">Notes for the day</span>
+        <textarea id="day-note" rows="3" placeholder="Sleep, activity, medication, triggers…"></textarea>
+      </label>
+      <p class="saved-hint" id="saved-hint">Saved automatically</p>
+    </section>
+
+    <!-- OVERVIEW -->
+    <section id="view-overview" class="view">
+      <div class="seg" id="range-seg">
+        <button data-range="7">7 days</button>
+        <button data-range="30" class="on">30 days</button>
+        <button data-range="90">90 days</button>
+        <button data-range="all">All</button>
+      </div>
+      <div class="seg" id="metric-seg">
+        <button data-metric="avg" class="on">Daily avg</button>
+        <button data-metric="morning">Morning</button>
+        <button data-metric="afternoon">Afternoon</button>
+        <button data-metric="evening">Evening</button>
+      </div>
+      <div class="card">
+        <div id="chart"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div id="stats"></div>
+      <div class="card">
+        <h3>By time of day</h3>
+        <div id="slot-table"></div>
+      </div>
+      <div class="card">
+        <h3>Daily heatmap</h3>
+        <div id="heatmap"></div>
+      </div>
+    </section>
+
+    <!-- APPOINTMENTS -->
+    <section id="view-appts" class="view">
+      <button class="primary wide" id="add-appt">+ Add appointment</button>
+      <div id="appt-list"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <div class="card">
+        <h3>Backup</h3>
+        <p class="muted">Your data is stored only on this device. Export a backup regularly, especially before clearing your browser.</p>
+        <div class="row">
+          <button id="export-json">Export backup (JSON)</button>
+          <button id="export-csv">Export pain log (CSV)</button>
+        </div>
+        <div class="row">
+          <label class="file-btn">Import backup<input type="file" id="import-json" accept="application/json,.json" hidden></label>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Print / share with your doctor</h3>
+        <p class="muted">Opens the overview in a print-friendly layout you can save as PDF.</p>
+        <button id="print-report">Print report</button>
+      </div>
+      <div class="card">
+        <h3>Danger zone</h3>
+        <button class="danger" id="wipe">Delete all data</button>
+      </div>
+      <p class="muted small">Seek urgent care for new numbness in the groin/saddle area, loss of bladder or bowel control, or rapidly worsening leg weakness.</p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-view="log" class="on"><span>✎</span>Log</button>
+    <button data-view="overview"><span>📈</span>Overview</button>
+    <button data-view="appts"><span>🗓</span>Appointments</button>
+    <button data-view="settings"><span>⚙</span>Settings</button>
+  </nav>
+
+  <dialog id="appt-dialog">
+    <form method="dialog" id="appt-form">
+      <h3 id="appt-dialog-title">Appointment</h3>
+      <div class="grid2">
+        <label>Date<input type="date" name="date" required></label>
+        <label>Time<input type="time" name="time"></label>
+      </div>
+      <label>Type
+        <select name="type">
+          <option>Physiotherapy</option>
+          <option>Doctor / GP</option>
+          <option>Specialist</option>
+          <option>Chiropractor</option>
+          <option>Imaging (MRI / X-ray)</option>
+          <option>Injection</option>
+          <option>Other</option>
+        </select>
+      </label>
+      <label>Provider / clinic<input name="provider" placeholder="e.g. Dr. Jansen, City Physio"></label>
+      <label>Treatment received<textarea name="treatment" rows="3" placeholder="e.g. McKenzie extensions, nerve flossing, dry needling, prescribed…"></textarea></label>
+      <label>Homework / advice<textarea name="homework" rows="2" placeholder="Exercises to do at home, next steps"></textarea></label>
+      <label>Notes<textarea name="notes" rows="2" placeholder="How it went, how you felt afterwards"></textarea></label>
+      <div class="row end">
+        <button type="button" class="danger" id="appt-delete">Delete</button>
+        <span class="spacer"></span>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
