@@ -35,9 +35,14 @@
       <div id="progress"></div>
       <div class="datebar">
         <button class="icon-btn" id="prev-day" aria-label="Previous day">‹</button>
-        <input type="date" id="log-date">
+        <label class="date-pick" for="log-date">
+          <span class="dp-main" id="log-date-main"></span>
+          <span class="dp-sub" id="log-date-sub"></span>
+          <input type="date" id="log-date" aria-label="Pick a date">
+        </label>
         <button class="icon-btn" id="next-day" aria-label="Next day">›</button>
       </div>
+      <div class="jump-today" id="jump-today-wrap"><button id="jump-today">↩ Back to today</button></div>
       <div id="day-appts"></div>
       <div class="card" id="sleep-card"></div>
       <div id="slots"></div>
@@ -173,17 +178,27 @@
       </div>
       <label>Type
         <select name="type">
-          <option>Physiotherapy</option>
-          <option>Doctor / GP</option>
-          <option>Specialist</option>
-          <option>Chiropractor</option>
-          <option>Imaging (MRI / X-ray)</option>
-          <option>Injection</option>
+          <optgroup label="Therapy">
+            <option>Physiotherapy</option>
+            <option>Manual therapy</option>
+            <option>Dry needling</option>
+            <option>Acupuncture</option>
+            <option>Massage / relaxation</option>
+            <option>Chiropractor</option>
+          </optgroup>
+          <optgroup label="Medical">
+            <option>Doctor / GP</option>
+            <option>Specialist</option>
+            <option>Imaging (MRI / X-ray)</option>
+            <option>Injection</option>
+          </optgroup>
           <option>Other</option>
         </select>
       </label>
+      <div class="field-label">Treatments given <span class="muted small">(tap all that apply)</span></div>
+      <div class="chips" id="appt-tx"></div>
       <label>Provider / clinic<input name="provider" placeholder="e.g. Dr. Jansen, City Physio"></label>
-      <label>Treatment received<textarea name="treatment" rows="3" placeholder="e.g. McKenzie extensions, nerve flossing, dry needling, prescribed…"></textarea></label>
+      <label>Treatment details<textarea name="treatment" rows="3" placeholder="e.g. needling right piriformis and glute, McKenzie extensions, nerve flossing…"></textarea></label>
       <label>Homework / advice<textarea name="homework" rows="2" placeholder="Exercises to do at home, next steps"></textarea></label>
       <label>Notes<textarea name="notes" rows="2" placeholder="How it went, how you felt afterwards"></textarea></label>
       <div class="row end">
