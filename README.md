@@ -18,7 +18,11 @@ A small app for tracking sciatica and lower-back pain (L5/S1 herniation) through
 - **Overview**: a trend chart for 7, 30 or 90 days or all time, with appointments 🗓 and medication changes 💊 marked on it, a sleep bar chart lined up underneath, and a list of events in the period. You can switch between the daily average and morning, afternoon or evening only.
   It also shows the period average compared with the previous period, averages by time of day, and a daily heatmap (including exercise and medication rows).
   There are also summaries of medication use, how well you kept up with your exercises, and how often each symptom appeared.
-- **Settings**: manage your medication and exercise lists, JSON backup and restore, CSV export (for Excel or Sheets), and a print/PDF report for your doctor.
+- **Progress & rewards**: a 🔥 streak, XP and levels, 15 badges, and a small celebration for every check-in.
+  It rewards *logging*, never taking medication, and a break isn't punished: your best streak is kept and coming back earns a badge.
+  The log opens on the check-in for the current time of day; the other check-ins fold into a one-line summary.
+- **Reminders**: choose 3 check-in times (default 8:00 / 14:00 / 21:00) and add them to your phone's calendar as repeating daily events with an alert.
+- **Settings**: dark (default, lilac and orange) or light theme, manage your medication and exercise lists, JSON backup and restore, CSV export (for Excel or Sheets), and a print/PDF report for your doctor.
 
 Data stays **on your device** (browser localStorage). Nothing is sent anywhere. Export a backup now and then.
 
@@ -44,6 +48,7 @@ Once installed it works offline. On iOS, use the installed home-screen app rathe
 | --- | --- |
 | `index.html` | Layout / views |
 | `styles.css` | Styling (light and dark mode, print layout) |
-| `app.js` | All logic: storage, logging, charts, appointments, export |
+| `app.js` | Main logic: storage, logging, charts, appointments, export, reminders |
+| `game.js` | Streaks, XP, badges, celebrations |
 | `sw.js` | Offline cache (bump `VERSION` after changes) |
 | `manifest.webmanifest`, `icon.svg` | Installable app metadata |

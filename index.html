@@ -4,7 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Pain Tracker</title>
-  <meta name="theme-color" content="#1f6feb">
+  <meta name="theme-color" content="#14111b">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script>
+    // apply theme before first paint (default: dark)
+    try {
+      var t = localStorage.getItem('paintracker.theme') || 'dark';
+      if (t === 'auto') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Pain Tracker">
   <link rel="manifest" href="manifest.webmanifest">
@@ -16,11 +25,14 @@
   <header class="topbar">
     <h1>Pain Tracker</h1>
     <span class="sub">L5/S1 · sciatica</span>
+    <span class="spacer"></span>
+    <span id="topbar-streak" class="topbar-streak"></span>
   </header>
 
   <main>
     <!-- LOG -->
     <section id="view-log" class="view active">
+      <div id="progress"></div>
       <div class="datebar">
         <button class="icon-btn" id="prev-day" aria-label="Previous day">‹</button>
         <input type="date" id="log-date">
@@ -101,6 +113,25 @@
       <div class="card">
         <div class="slot-head"><h3>🏃 My home exercises</h3><button class="copy-prev" id="add-ex">+ Add</button></div>
         <div id="ex-list"></div>
+      </div>
+      <div class="card">
+        <h3>🔔 Reminders</h3>
+        <p class="muted">Pick your check-in times and add them to your phone's calendar as repeating daily events with an alert. Tap the alert, open Pain Tracker, log, done.</p>
+        <div class="grid3">
+          <label>🌅 Morning<input type="time" id="rem-morning" value="08:00"></label>
+          <label>☀️ Afternoon<input type="time" id="rem-afternoon" value="14:00"></label>
+          <label>🌙 Evening<input type="time" id="rem-evening" value="21:00"></label>
+        </div>
+        <div class="row"><button class="primary" id="add-reminders">📅 Add reminders to my calendar</button></div>
+        <p class="muted small">Not working from the installed app on iPhone? Open this page in Safari and tap the button there. To change the times later, delete the old "Pain check-in" events and add them again.</p>
+      </div>
+      <div class="card">
+        <h3>🎨 Theme</h3>
+        <div class="seg" id="theme-seg">
+          <button data-theme="dark">Dark</button>
+          <button data-theme="light">Light</button>
+          <button data-theme="auto">Match phone</button>
+        </div>
       </div>
       <div class="card">
         <h3>Backup</h3>
@@ -204,6 +235,15 @@
     </form>
   </dialog>
 
+  <dialog id="ach-dialog">
+    <form method="dialog">
+      <div class="slot-head"><h3>🏆 Your progress</h3><button value="close" aria-label="Close">✕</button></div>
+      <div id="ach-body"></div>
+    </form>
+  </dialog>
+  <div id="toasts" aria-live="polite"></div>
+
+  <script src="game.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

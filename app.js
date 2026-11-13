@@ -17,7 +17,7 @@ const SYMPTOMS = [
   'Pain below the knee', 'Pain in the other leg', 'Morning stiffness', 'Worse when sitting',
   'Worse when lying down', 'Woke up due to sciatica pain', 'Poor sleep',
 ];
-const MED_COLOR = '#0a8f8f';
+const MED_COLOR = 'var(--med)';
 
 /* ---------- Helpers ---------- */
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -53,8 +53,10 @@ function load() {
 }
 let data = load();
 let saveTimer;
+function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  persist();
+  checkBadgesSoon();
   const hint = $('#saved-hint');
   hint.textContent = 'Saved ✓';
   clearTimeout(saveTimer);
@@ -106,6 +108,20 @@ $$('.tabs button').forEach((b) => b.addEventListener('click', () => showView(b.d
 /* ---------- Log view ---------- */
 let currentDate = todayISO();
 const dateInput = $('#log-date');
+function currentSlotId() {
+  const h = new Date().getHours();
+  return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+}
+// Which slot cards are open. Today: the one for the current time of day.
+// Other days: the first one that isn't fully logged yet.
+let openSlots = null, openFor = null;
+function ensureOpenSlots() {
+  if (openFor === currentDate && openSlots) return;
+  openFor = currentDate;
+  const first = currentDate === todayISO() ? currentSlotId() : (SLOTS.find((s) => !slotComplete(currentDate, s.id)) || SLOTS[0]).id;
+  openSlots = new Set([first]);
+}
+const slotSummary = (sv) => AREAS.map((a) => `<span class="mini" style="--c:${a.color}">${({ right: 'R leg', left: 'L leg', back: 'Back' })[a.id]} <b>${sv[a.id] ?? '–'}</b></span>`).join('');
 
 function renderLog() {
   dateInput.value = currentDate;
@@ -122,10 +138,23 @@ function renderLog() {
   $('#log-add-appt').addEventListener('click', () => openAppt(null, currentDate));
 
   // slots
+  ensureOpenSlots();
+  renderProgress();
   $('#slots').innerHTML = SLOTS.map((s, i) => {
     const sv = entry[s.id] || {};
-    return `<div class="card" data-slot="${s.id}">
-      <div class="slot-head"><h3>${s.icon} ${s.name} <span class="hint">${s.hint}</span></h3>
+    const open = openSlots.has(s.id);
+    const done = slotComplete(currentDate, s.id);
+    const logged = slotLogged(currentDate, s.id);
+    if (!open) {
+      return `<div class="card slot collapsed ${done ? 'done' : ''}" data-slot="${s.id}">
+        <button class="slot-toggle" data-toggle>
+          <span class="st-name">${s.icon} ${s.name}</span>
+          ${logged ? `<span class="minis">${slotSummary(sv)}</span>` : '<span class="muted small">tap to log</span>'}
+          <span class="st-check">${done ? '✓' : '›'}</span>
+        </button></div>`;
+    }
+    return `<div class="card slot ${done ? 'done' : ''}" data-slot="${s.id}">
+      <div class="slot-head"><button class="slot-title" data-toggle><h3>${s.icon} ${s.name} <span class="hint">${s.hint}</span></h3></button>
         ${i > 0 ? `<button class="copy-prev" data-copy="${SLOTS[i - 1].id}">Same as ${SLOTS[i - 1].name.toLowerCase()}</button>` : ''}
       </div>
       ${AREAS.map((a) => {
@@ -314,16 +343,52 @@ $('#med-delete').addEventListener('click', () => {
   save(); medDlg.close('deleted'); refreshActive();
 });
 
+const KIND_LABEL = { start: 'Started', dose: 'Dose change', stop: 'Stopped' };
 function renderMedHistory(m) {
+  if (!m.id) { $('#med-history').innerHTML = ''; return; }
   const evs = medEvents().filter((e) => e.medId === m.id);
-  $('#med-history').innerHTML = m.id && evs.length ? `<div class="hist"><b>Change history</b> <span class="muted">(shown on the pain chart)</span>
-    ${evs.map((e) => `<div class="ev"><span class="d">${fmtDate(e.date, { day: 'numeric', month: 'short', year: '2-digit' })}</span><span>${esc(e.label)}</span>
-      ${e.changeId ? `<button type="button" data-rmchange="${e.changeId}" aria-label="Remove change">✕</button>` : '<span class="muted small" style="margin-left:auto">first dose</span>'}</div>`).join('')}</div>` : '';
+  $('#med-history').innerHTML = `<div class="hist"><b>Change history</b> <span class="muted">(shown on the pain chart · edits save right away)</span>
+    ${evs.map((e) => `<div class="hist-row" data-change="${e.changeId || ''}" data-derived="${e.changeId ? '' : '1'}">
+        <select data-k="kind" aria-label="Type of change">${Object.entries(KIND_LABEL).map(([k, l]) => `<option value="${k}" ${k === e.kind ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <input type="date" data-k="date" value="${e.date}" aria-label="Date">
+        <input data-k="dose" value="${esc(e.dose || '')}" placeholder="dose" inputmode="decimal" aria-label="Dose" ${e.kind === 'stop' ? 'disabled' : ''}>
+        <button type="button" data-rmchange aria-label="Remove change">✕</button>
+      </div>`).join('') || '<div class="empty-sm">No changes recorded yet.</div>'}
+    <button type="button" class="copy-prev" id="add-change">+ Add a past change</button>
+    ${evs.some((e) => !e.changeId) ? '<div class="muted small">The "Started" row without a recorded date comes from your first logged dose. Editing it saves it as a real entry.</div>' : ''}
+  </div>`;
 }
+function medForEdit() { const m = data.meds.find((x) => x.id === editingMed); m.changes = m.changes || []; return m; }
+// Turn a derived "first dose" row into a stored change so it can be edited/removed
+function materialize(m, row) {
+  if (row.dataset.change) return m.changes.find((c) => c.id === row.dataset.change);
+  const ev = medEvents().find((e) => e.medId === m.id && !e.changeId);
+  const c = { id: uid(), date: ev.date, kind: 'start', dose: ev.dose || '', unit: ev.unit || m.unit || '' };
+  m.changes.push(c);
+  return c;
+}
+$('#med-history').addEventListener('change', (ev) => {
+  const k = ev.target.dataset.k; if (!k) return;
+  const m = medForEdit(); const row = ev.target.closest('.hist-row');
+  const c = materialize(m, row);
+  c[k] = ev.target.value.trim();
+  if (!c.date) c.date = todayISO();
+  m.changes.sort((a, b) => a.date.localeCompare(b.date));
+  save(); renderMedHistory(m);
+});
 $('#med-history').addEventListener('click', (ev) => {
+  const m = editingMed && medForEdit(); if (!m) return;
+  if (ev.target.id === 'add-change') {
+    m.changes.push({ id: uid(), date: todayISO(), kind: 'dose', dose: medForm.elements.dose.value.trim(), unit: medForm.elements.unit.value.trim() });
+    m.changes.sort((a, b) => a.date.localeCompare(b.date));
+    save(); renderMedHistory(m); return;
+  }
   const b = ev.target.closest('[data-rmchange]'); if (!b) return;
-  const m = data.meds.find((x) => x.id === editingMed);
-  m.changes = (m.changes || []).filter((c) => c.id !== b.dataset.rmchange);
+  const row = b.closest('.hist-row');
+  if (row.dataset.derived) {
+    // hide the derived start by storing an explicit start the user can see; removing it = mark as ignored
+    m.ignoreFirstDose = true;
+  } else m.changes = m.changes.filter((c) => c.id !== row.dataset.change);
   save(); renderMedHistory(m);
 });
 // All medication changes as chart events. Meds without a recorded start
@@ -336,14 +401,14 @@ function medEvents() {
   const out = [];
   for (const m of data.meds) {
     const changes = m.changes || [];
-    if (!changes.some((c) => c.kind === 'start') && first[m.id]) {
+    if (!m.ignoreFirstDose && !changes.some((c) => c.kind === 'start') && first[m.id]) {
       const f = first[m.id];
-      out.push({ medId: m.id, date: f.date, kind: 'start', label: `Started ${m.name} ${[f.dose, f.unit].filter(Boolean).join(' ')}`.trim() });
+      out.push({ medId: m.id, date: f.date, kind: 'start', dose: f.dose, unit: f.unit, label: `Started ${m.name} ${[f.dose, f.unit].filter(Boolean).join(' ')}`.trim() });
     }
     for (const c of changes) {
-      const dose = [c.dose, c.unit].filter(Boolean).join(' ');
+      const dose = [c.dose, c.unit || m.unit].filter((v) => v).join(' ');
       const label = c.kind === 'start' ? `Started ${m.name} ${dose}` : c.kind === 'stop' ? `Stopped ${m.name}` : `${m.name} dose → ${dose}`;
-      out.push({ medId: m.id, changeId: c.id, date: c.date, kind: c.kind, label: label.trim() });
+      out.push({ medId: m.id, changeId: c.id, date: c.date, kind: c.kind, dose: c.dose, unit: c.unit, label: label.trim() });
     }
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
@@ -400,6 +465,11 @@ $('#slots').addEventListener('click', (ev) => {
   if (!btn) return;
   const card = btn.closest('[data-slot]');
   const slot = card.dataset.slot;
+  if ('toggle' in btn.dataset) {
+    openSlots.has(slot) ? openSlots.delete(slot) : openSlots.add(slot);
+    return renderLog();
+  }
+  const wasComplete = slotComplete(currentDate, slot), dayBefore = SLOTS.every((x) => slotComplete(currentDate, x.id));
   if (btn.dataset.copy) {
     const src = getSlot(currentDate, btn.dataset.copy);
     if (!src || AREAS.every((a) => src[a.id] == null)) return;
@@ -414,6 +484,7 @@ $('#slots').addEventListener('click', (ev) => {
   pruneEntry(currentDate);
   save();
   renderLog();
+  celebrateCheckin(currentDate, slot, wasComplete, dayBefore);
 });
 $('#slots').addEventListener('input', (ev) => {
   if (!ev.target.matches('[data-note]')) return;
@@ -544,7 +615,7 @@ function renderExOverview(dates) {
     return `<div class="ov-row">
       <div class="top"><b>${esc(x.name)}</b><span class="muted">${days} of ${n} days</span></div>
       <div class="muted small">${sessions} session${sessions === 1 ? '' : 's'}${target ? ` · ${Math.round(pct)}% of target (${target}×/day)` : ''}</div>
-      <div class="bar"><i style="width:${pct}%;background:#1a7f37"></i></div></div>`;
+      <div class="bar"><i style="width:${pct}%;background:var(--good)"></i></div></div>`;
   }).join('') : '<div class="empty-sm">No exercises set up yet. Add them in Settings or on the Log page.</div>';
 }
 
@@ -637,11 +708,11 @@ function renderSleepChart(dates, { L, R, W }) {
     if (!night && !nap) return;
     const x0 = Math.min(Math.max(cx(i) - bw / 2, L), W - R - bw);
     const tip = `${fmtDate(dates[i])}: night ${fmtHours(v.night)}, naps ${fmtHours(v.nap)}`;
-    if (night) svg += `<rect x="${x0}" y="${y(night)}" width="${bw}" height="${y(0) - y(night)}" rx="1.5" fill="#5b5bd6"><title>${tip}</title></rect>`;
-    if (nap) svg += `<rect x="${x0}" y="${y(night + nap)}" width="${bw}" height="${y(night) - y(night + nap)}" rx="1.5" fill="#a5a5f0"><title>${tip}</title></rect>`;
+    if (night) svg += `<rect x="${x0}" y="${y(night)}" width="${bw}" height="${y(0) - y(night)}" rx="1.5" fill="var(--sleep)"><title>${tip}</title></rect>`;
+    if (nap) svg += `<rect x="${x0}" y="${y(night + nap)}" width="${bw}" height="${y(night) - y(night + nap)}" rx="1.5" fill="var(--nap)"><title>${tip}</title></rect>`;
   });
   svg += '</svg>';
-  $('#sleep-chart').innerHTML = `<h4>😴 Sleep</h4>${svg}<div class="legend"><span><i style="background:#5b5bd6;height:8px"></i>Night</span><span><i style="background:#a5a5f0;height:8px"></i>Naps</span></div>`;
+  $('#sleep-chart').innerHTML = `<h4>😴 Sleep</h4>${svg}<div class="legend"><span><i style="background:var(--sleep);height:8px"></i>Night</span><span><i style="background:var(--nap);height:8px"></i>Naps</span></div>`;
 }
 
 function renderChartEvents(dates) {
@@ -699,13 +770,13 @@ function renderHeatmap(dates) {
     const sessions = Object.values(ex).reduce((a, b) => a + b, 0);
     const target = data.exercises.filter((x) => x.active !== false).reduce((a, x) => a + (Number(x.target) || 1), 0) || 1;
     const r = Math.min(1, sessions / target);
-    return `<div class="hm-cell" title="${fmtDate(d)}: ${sessions} exercise session(s)" style="${sessions ? `background:hsl(140 55% ${70 - r * 38}%)` : ''}"></div>`;
+    return `<div class="hm-cell" title="${fmtDate(d)}: ${sessions} exercise session(s)" style="${sessions ? `background:color-mix(in srgb, var(--good) ${30 + r * 70}%, var(--line))` : ''}"></div>`;
   }).join('')}</div>
   <div>Medication</div><div class="hm-row" style="${cols}">${dates.map((d) => {
     const c = (data.entries[d]?.meds || []).length;
-    return `<div class="hm-cell" title="${fmtDate(d)}: ${c} dose(s)" style="${c ? `background:hsl(212 75% ${72 - Math.min(c, 5) * 8}%)` : ''}"></div>`;
+    return `<div class="hm-cell" title="${fmtDate(d)}: ${c} dose(s)" style="${c ? `background:color-mix(in srgb, var(--med) ${30 + Math.min(c, 5) * 14}%, var(--line))` : ''}"></div>`;
   }).join('')}</div></div>
-  <p class="muted small">Pain: green = low, red = high. Outlined squares are appointment days. Exercises: darker green = closer to your daily target. Medication: darker blue = more doses.</p>`;
+  <p class="muted small">Pain: green = low, red = high. Outlined squares are appointment days. Exercises: brighter green = closer to your daily target. Medication: brighter yellow = more doses.</p>`;
 }
 
 /* ---------- Appointments ---------- */
@@ -845,12 +916,63 @@ $('#wipe').addEventListener('click', () => {
   showView('log');
 });
 
+/* ---------- Reminders (calendar file) ---------- */
+// Web apps can't schedule notifications on their own (that needs a push server),
+// so we create repeating calendar events with an alert: works on every phone.
+const REM_KEY = 'paintracker.reminders';
+function loadReminderTimes() {
+  try { return JSON.parse(localStorage.getItem(REM_KEY)) || {}; } catch (e) { return {}; }
+}
+(() => {
+  const t = loadReminderTimes();
+  for (const s of SLOTS) {
+    const el = $(`#rem-${s.id}`);
+    if (t[s.id]) el.value = t[s.id];
+    el.addEventListener('change', () => {
+      const cur = loadReminderTimes(); cur[s.id] = el.value;
+      try { localStorage.setItem(REM_KEY, JSON.stringify(cur)); } catch (e) { /* ignore */ }
+    });
+  }
+})();
+function buildICS() {
+  const appUrl = location.href.split('#')[0].split('?')[0];
+  const start = todayISO().replace(/-/g, '');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pain Tracker//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  for (const s of SLOTS) {
+    const t = ($(`#rem-${s.id}`).value || '08:00').replace(':', '');
+    lines.push('BEGIN:VEVENT',
+      `UID:paintracker-${s.id}-${start}@local`, `DTSTAMP:${stamp}`,
+      `DTSTART:${start}T${t}00`, 'DURATION:PT5M', 'RRULE:FREQ=DAILY',
+      `SUMMARY:${s.icon} Pain check-in (${s.name.toLowerCase()})`,
+      `DESCRIPTION:3 taps: right leg\\, left leg\\, back. Keep your streak going! ${appUrl}`,
+      `URL:${appUrl}`, 'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${s.name} pain check-in`, 'TRIGGER:PT0M', 'END:VALARM',
+      'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+$('#add-reminders').addEventListener('click', () => download('pain-tracker-reminders.ics', buildICS(), 'text/calendar'));
+
+/* ---------- Theme ---------- */
+function applyTheme(t) {
+  try { localStorage.setItem('paintracker.theme', t); } catch (e) { /* ignore */ }
+  const eff = t === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : t;
+  document.documentElement.dataset.theme = eff;
+  $('meta[name=theme-color]').content = eff === 'light' ? '#f6f3fb' : '#14111b';
+  $$('#theme-seg button').forEach((b) => b.classList.toggle('on', b.dataset.theme === t));
+}
+$('#theme-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { applyTheme(b.dataset.theme); refreshActive(); } });
+applyTheme((() => { try { return localStorage.getItem('paintracker.theme') || 'dark'; } catch (e) { return 'dark'; } })());
+
 /* ---------- Boot ---------- */
 // keep "today" fresh if app stays open overnight
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && $('#view-log').classList.contains('active')) renderLog();
 });
 renderLog();
+checkBadges(); // first run marks already-earned badges as seen
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
