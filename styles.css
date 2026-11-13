@@ -176,6 +176,21 @@ dialog label > input, dialog label > select, dialog label > textarea { margin-to
   .appt { break-inside: avoid; }
 }
 
+/* Sleep */
+.sleep-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.sleep-row .info { flex: 1; }
+.sleep-row .info .muted { font-size: .82rem; }
+.sleep-row .counter { grid-template-columns: 40px 76px 40px; }
+.sleep-row .counter span { font-variant-numeric: tabular-nums; }
+#sleep-chart { margin-top: 14px; }
+#sleep-chart h4, #chart-events h4 { margin: 0 0 4px; font-size: .9rem; }
+#chart-events { margin-top: 14px; }
+.ev { display: flex; gap: 8px; font-size: .88rem; padding: 5px 0; border-top: 1px solid var(--line); }
+.ev:first-of-type { border-top: none; }
+.ev .d { color: var(--muted); min-width: 62px; }
+.hist { font-size: .85rem; margin-top: 10px; }
+.hist .ev button { margin-left: auto; padding: 0 8px; font-size: .8rem; }
+
 /* Meds / exercises / symptoms */
 .quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
 .quick button { padding: 8px 10px; font-size: .88rem; border-radius: 999px; }

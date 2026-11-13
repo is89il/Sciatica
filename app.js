@@ -14,8 +14,10 @@ const AREAS = [
 ];
 const SYMPTOMS = [
   'Numbness', 'Tingling / pins & needles', 'Leg weakness', 'Burning', 'Muscle cramps / spasms',
-  'Pain below the knee', 'Morning stiffness', 'Worse when sitting', 'Poor sleep',
+  'Pain below the knee', 'Pain in the other leg', 'Morning stiffness', 'Worse when sitting',
+  'Worse when lying down', 'Woke up due to sciatica pain', 'Poor sleep',
 ];
+const MED_COLOR = '#0a8f8f';
 
 /* ---------- Helpers ---------- */
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -83,6 +85,7 @@ function pruneEntry(date) {
     if (!Object.keys(e.exercises).length) delete e.exercises;
   }
   if (e.symptoms && !e.symptoms.length) delete e.symptoms;
+  if (e.sleep && e.sleep.night == null && e.sleep.nap == null) delete e.sleep;
   for (const k of ['exNote', 'symptomNote']) if (k in e && !e[k]) delete e[k];
   const keys = Object.keys(e).filter((k) => k !== 'note');
   if (!e.note && !keys.length) delete data.entries[date];
@@ -138,10 +141,42 @@ function renderLog() {
   }).join('');
 
   $('#day-note').value = entry.note || '';
+  renderSleepCard(entry);
   renderMedsCard(entry);
   renderExCard(entry);
   renderSymCard(entry);
 }
+
+/* ---------- Sleep (log) ---------- */
+const SLEEP = [
+  { id: 'night', name: 'Night sleep', hint: 'the night before this day', step: 0.5, start: 7, max: 16 },
+  { id: 'nap', name: 'Naps', hint: 'total during the day', step: 0.25, start: 0.5, max: 8 },
+];
+const fmtHours = (h) => {
+  if (h == null) return '–';
+  const m = Math.round(h * 60), hh = Math.floor(m / 60), mm = m % 60;
+  return hh && mm ? `${hh}h ${pad(mm)}m` : hh ? `${hh}h` : `${mm}m`;
+};
+function renderSleepCard(entry) {
+  const sl = entry.sleep || {};
+  $('#sleep-card').innerHTML = `<div class="slot-head"><h3>😴 Sleep</h3><span class="hint">${sl.night != null || sl.nap != null ? 'total ' + fmtHours((sl.night || 0) + (sl.nap || 0)) : ''}</span></div>
+    ${SLEEP.map((k) => `<div class="sleep-row" data-sleep="${k.id}">
+      <div class="info"><b>${k.name}</b><div class="muted">${k.hint}</div></div>
+      <div class="counter"><button data-d="-1" aria-label="Less ${k.name}">−</button><span>${sl[k.id] == null ? 'not set' : fmtHours(sl[k.id])}</span><button data-d="1" aria-label="More ${k.name}">+</button></div>
+    </div>`).join('')}`;
+}
+$('#sleep-card').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-d]'); if (!b) return;
+  const k = SLEEP.find((x) => x.id === b.closest('[data-sleep]').dataset.sleep);
+  const e = getEntry(currentDate, true); e.sleep = e.sleep || { night: null, nap: null };
+  const cur = e.sleep[k.id], d = Number(b.dataset.d);
+  if (cur == null) e.sleep[k.id] = d > 0 ? k.start : null;
+  else {
+    const v = cur + d * k.step;
+    e.sleep[k.id] = v < 0 ? null : Math.min(k.max, v); // going below 0 clears it
+  }
+  pruneEntry(currentDate); save(); renderLog();
+});
 
 /* ---------- Medication (log) ---------- */
 const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -248,6 +283,9 @@ function openMed(id, fromLog = false) {
   for (const k of ['name', 'dose', 'unit', 'schedule']) medForm.elements[k].value = m[k] || '';
   if (!id) medForm.elements.unit.value = 'mg';
   medForm.elements.active.checked = m.active !== false;
+  medForm.elements.effective.value = currentDate <= todayISO() ? currentDate : todayISO();
+  $('#med-eff-wrap').firstChild.textContent = id ? 'If you changed dose or stopped/restarted: on which date?' : 'Started on';
+  renderMedHistory(m);
   medDlg.returnValue = '';
   medDlg.showModal();
 }
@@ -257,6 +295,15 @@ medDlg.addEventListener('close', () => {
   const rec = { id: editingMed || uid(), name: f.name.value.trim(), dose: f.dose.value.trim(), unit: f.unit.value.trim(), schedule: f.schedule.value.trim(), active: f.active.checked };
   if (!rec.name) return;
   const i = data.meds.findIndex((x) => x.id === rec.id);
+  const old = i >= 0 ? data.meds[i] : null;
+  const when = f.effective.value || todayISO();
+  rec.changes = [...(old?.changes || [])];
+  const ch = (kind) => rec.changes.push({ id: uid(), date: when, kind, dose: rec.dose, unit: rec.unit });
+  if (!old) ch(rec.active ? 'start' : 'stop');
+  else if (old.active === false && rec.active) ch('start');
+  else if (old.active !== false && !rec.active) ch('stop');
+  else if (rec.active && (old.dose !== rec.dose || old.unit !== rec.unit)) ch('dose');
+  rec.changes.sort((a, b) => a.date.localeCompare(b.date));
   if (i >= 0) data.meds[i] = rec; else data.meds.push(rec);
   if (medFromLog && f.lognow.checked) logDose(rec);
   save(); refreshActive();
@@ -266,6 +313,41 @@ $('#med-delete').addEventListener('click', () => {
   data.meds = data.meds.filter((x) => x.id !== editingMed);
   save(); medDlg.close('deleted'); refreshActive();
 });
+
+function renderMedHistory(m) {
+  const evs = medEvents().filter((e) => e.medId === m.id);
+  $('#med-history').innerHTML = m.id && evs.length ? `<div class="hist"><b>Change history</b> <span class="muted">(shown on the pain chart)</span>
+    ${evs.map((e) => `<div class="ev"><span class="d">${fmtDate(e.date, { day: 'numeric', month: 'short', year: '2-digit' })}</span><span>${esc(e.label)}</span>
+      ${e.changeId ? `<button type="button" data-rmchange="${e.changeId}" aria-label="Remove change">✕</button>` : '<span class="muted small" style="margin-left:auto">first dose</span>'}</div>`).join('')}</div>` : '';
+}
+$('#med-history').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-rmchange]'); if (!b) return;
+  const m = data.meds.find((x) => x.id === editingMed);
+  m.changes = (m.changes || []).filter((c) => c.id !== b.dataset.rmchange);
+  save(); renderMedHistory(m);
+});
+// All medication changes as chart events. Meds without a recorded start
+// (added before change tracking existed) use their first logged dose.
+function medEvents() {
+  const first = {};
+  for (const d of Object.keys(data.entries).sort()) {
+    for (const t of data.entries[d].meds || []) if (t.medId && !first[t.medId]) first[t.medId] = { date: d, dose: t.dose, unit: t.unit };
+  }
+  const out = [];
+  for (const m of data.meds) {
+    const changes = m.changes || [];
+    if (!changes.some((c) => c.kind === 'start') && first[m.id]) {
+      const f = first[m.id];
+      out.push({ medId: m.id, date: f.date, kind: 'start', label: `Started ${m.name} ${[f.dose, f.unit].filter(Boolean).join(' ')}`.trim() });
+    }
+    for (const c of changes) {
+      const dose = [c.dose, c.unit].filter(Boolean).join(' ');
+      const label = c.kind === 'start' ? `Started ${m.name} ${dose}` : c.kind === 'stop' ? `Stopped ${m.name}` : `${m.name} dose → ${dose}`;
+      out.push({ medId: m.id, changeId: c.id, date: c.date, kind: c.kind, label: label.trim() });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
 
 const exDlg = $('#ex-dialog'), exForm = $('#ex-form');
 let editingEx = null;
@@ -406,10 +488,30 @@ function renderOverview() {
   renderChart(dates);
   renderStats(dates);
   renderSlotTable(dates);
+  renderSleepOverview(dates);
   renderMedsOverview(dates);
   renderExOverview(dates);
   renderSymOverview(dates);
   renderHeatmap(dates);
+}
+
+function renderSleepOverview(dates) {
+  const sl = dates.map((d) => data.entries[d]?.sleep).filter(Boolean);
+  const nights = sl.map((s) => s.night).filter((v) => v != null);
+  const naps = sl.map((s) => s.nap).filter((v) => v != null);
+  const woke = dates.filter((d) => data.entries[d]?.symptoms?.includes('Woke up due to sciatica pain')).length;
+  if (!nights.length && !naps.length && !woke) { $('#ov-sleep').innerHTML = '<div class="empty-sm">No sleep logged in this period.</div>'; return; }
+  // pain on short vs long nights (needs a few nights of each)
+  const painOf = (d) => mean(AREAS.map((a) => dayValue(d, a.id, 'avg')).filter((v) => v != null));
+  const short = [], long = [];
+  dates.forEach((d) => { const h = data.entries[d]?.sleep?.night, p = painOf(d); if (h == null || p == null) return; (h < 6 ? short : h >= 7 ? long : []).push(p); });
+  const cmp = short.length >= 3 && long.length >= 3
+    ? `<p class="muted small">Average pain after short nights (&lt;6h): <b>${fmt(mean(short))}</b> · after 7h+: <b>${fmt(mean(long))}</b></p>` : '';
+  $('#ov-sleep').innerHTML = `<div class="stats">
+      <div class="stat"><div class="k">Avg night</div><div class="n">${fmtHours(mean(nights))}</div><div class="k">${nights.length} nights logged</div></div>
+      <div class="stat"><div class="k">Avg naps</div><div class="n">${fmtHours(mean(naps))}</div><div class="k">${naps.filter(Boolean).length} days with naps</div></div>
+      <div class="stat"><div class="k">Woken by pain</div><div class="n">${woke}</div><div class="k">of ${dates.length} nights</div></div>
+    </div>${cmp}`;
 }
 
 function renderMedsOverview(dates) {
@@ -479,7 +581,7 @@ function renderChart(dates) {
   const step = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(iw / 60))));
   dates.forEach((d, i) => {
     if (i % step === 0 || i === n - 1) {
-      if (i === n - 1 && i % step !== 0 && (n - 1) % step < step / 2) return;
+      if (i !== n - 1 && n > 1 && x(n - 1) - x(i) < 52) return; // keep room for the last label
       svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="${i === n - 1 && n > 1 ? 'end' : i === 0 && n > 1 ? 'start' : 'middle'}" font-size="11" fill="var(--muted)">${fmtDate(d, { day: 'numeric', month: 'short' })}</text>`;
     }
   });
@@ -490,6 +592,13 @@ function renderChart(dates) {
     const xi = x(idx[a.date]);
     svg += `<line x1="${xi}" x2="${xi}" y1="${T}" y2="${T + ih}" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1"><title>${esc(a.type)} ${esc(a.provider || '')}</title></line>`;
     svg += `<text x="${xi}" y="${T + 9}" text-anchor="middle" font-size="10">🗓</text>`;
+  });
+  // medication change markers
+  medEvents().forEach((e) => {
+    if (idx[e.date] == null) return;
+    const xi = x(idx[e.date]) + 0.5;
+    svg += `<line x1="${xi}" x2="${xi}" y1="${T}" y2="${T + ih}" stroke="${MED_COLOR}" stroke-width="1.5" opacity=".7"><title>${esc(e.label)}</title></line>`;
+    svg += `<text x="${xi}" y="${T + ih - 3}" text-anchor="middle" font-size="11">💊</text>`;
   });
   // lines
   AREAS.forEach((a) => {
@@ -507,7 +616,42 @@ function renderChart(dates) {
   const hasData = dates.some(hasPain);
   $('#chart').innerHTML = hasData ? svg : '<div class="empty">No pain logged in this period yet.</div>';
   $('#legend').innerHTML = AREAS.map((a) => `<span><i style="background:${a.color}"></i>${a.name}</span>`).join('') +
-    '<span class="muted">🗓 = appointment</span>';
+    '<span class="muted">🗓 = appointment</span><span class="muted">💊 = medication change</span>';
+  renderSleepChart(dates, { L, R, W });
+  renderChartEvents(dates);
+}
+
+function renderSleepChart(dates, { L, R, W }) {
+  const vals = dates.map((d) => data.entries[d]?.sleep || {});
+  if (!vals.some((v) => v.night != null || v.nap != null)) { $('#sleep-chart').innerHTML = ''; return; }
+  const H = 96, T = 6, B = 4, ih = H - T - B, iw = W - L - R, n = dates.length, MAX = 12;
+  const slot = iw / n, bw = Math.max(2, Math.min(16, slot * 0.7));
+  const cx = (i) => L + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
+  const y = (h) => T + ih - (Math.min(h, MAX) / MAX) * ih;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Sleep chart">`;
+  for (const h of [0, 4, 8, 12]) {
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y(h)}" y2="${y(h)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(h) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${h}h</text>`;
+  }
+  vals.forEach((v, i) => {
+    const night = v.night || 0, nap = v.nap || 0;
+    if (!night && !nap) return;
+    const x0 = Math.min(Math.max(cx(i) - bw / 2, L), W - R - bw);
+    const tip = `${fmtDate(dates[i])}: night ${fmtHours(v.night)}, naps ${fmtHours(v.nap)}`;
+    if (night) svg += `<rect x="${x0}" y="${y(night)}" width="${bw}" height="${y(0) - y(night)}" rx="1.5" fill="#5b5bd6"><title>${tip}</title></rect>`;
+    if (nap) svg += `<rect x="${x0}" y="${y(night + nap)}" width="${bw}" height="${y(night) - y(night + nap)}" rx="1.5" fill="#a5a5f0"><title>${tip}</title></rect>`;
+  });
+  svg += '</svg>';
+  $('#sleep-chart').innerHTML = `<h4>😴 Sleep</h4>${svg}<div class="legend"><span><i style="background:#5b5bd6;height:8px"></i>Night</span><span><i style="background:#a5a5f0;height:8px"></i>Naps</span></div>`;
+}
+
+function renderChartEvents(dates) {
+  const [start, end] = [dates[0], dates[dates.length - 1]];
+  const inRange = (d) => d >= start && d <= end;
+  const evs = [
+    ...medEvents().filter((e) => inRange(e.date)).map((e) => ({ date: e.date, icon: '💊', text: e.label })),
+    ...data.appointments.filter((a) => inRange(a.date)).map((a) => ({ date: a.date, icon: '🗓', text: `${a.type}${a.provider ? ' · ' + a.provider : ''}` })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+  $('#chart-events').innerHTML = evs.length ? `<h4>Events in this period</h4>${evs.map((e) => `<div class="ev"><span class="d">${fmtDate(e.date, { day: 'numeric', month: 'short' })}</span><span>${e.icon} ${esc(e.text)}</span></div>`).join('')}` : '';
 }
 
 function renderStats(dates) {
@@ -658,7 +802,7 @@ $('#export-json').addEventListener('click', () =>
   download(`pain-tracker-backup-${todayISO()}.json`, JSON.stringify(data, null, 2), 'application/json'));
 $('#export-csv').addEventListener('click', () => {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const lines = ['date,time_of_day,right_leg,left_leg,lower_back,slot_note,day_note,appointments,medication,exercises,exercise_note,symptoms,symptom_note'];
+  const lines = ['date,time_of_day,right_leg,left_leg,lower_back,slot_note,day_note,appointments,medication,exercises,exercise_note,symptoms,symptom_note,sleep_night_h,naps_h'];
   const exName = (id) => data.exercises.find((x) => x.id === id)?.name || id;
   Object.keys(data.entries).sort().forEach((d) => {
     const e = data.entries[d];
@@ -667,7 +811,7 @@ $('#export-csv').addEventListener('click', () => {
       const v = e[s.id] || {};
       const meds = (e.meds || []).map((t) => `${t.time ? t.time + ' ' : ''}${t.name} ${[t.dose, t.unit].filter(Boolean).join(' ')}`.trim()).join(' | ');
       const ex = Object.entries(e.exercises || {}).map(([id, c]) => `${exName(id)} x${c}`).join(' | ');
-      lines.push([d, s.id, v.right ?? '', v.left ?? '', v.back ?? '', q(v.note), q(e.note), q(appts), q(meds), q(ex), q(e.exNote), q((e.symptoms || []).join(' | ')), q(e.symptomNote)].join(','));
+      lines.push([d, s.id, v.right ?? '', v.left ?? '', v.back ?? '', q(v.note), q(e.note), q(appts), q(meds), q(ex), q(e.exNote), q((e.symptoms || []).join(' | ')), q(e.symptomNote), e.sleep?.night ?? '', e.sleep?.nap ?? ''].join(','));
     });
   });
   download(`pain-log-${todayISO()}.csv`, lines.join('\n'), 'text/csv');

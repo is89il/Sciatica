@@ -7,13 +7,15 @@ A small app for tracking sciatica and lower-back pain (L5/S1 herniation) through
 - **Log**: score pain from 0 to 10 for the **right leg**, **left leg** and **lower back**, three times a day:
   morning (after waking up), afternoon, and evening (before bed). Tap a number to set it and tap it again to clear it.
   "Same as morning" copies the previous scores. There is an optional note per time of day and one for the whole day.
+- **Sleep**: hours of night sleep (for the night before) and total naps, set with +/− buttons in 30-minute or 15-minute steps.
 - **Medication**: save your medications once (name, usual dose, unit, schedule). After that, one tap logs a dose with the time. You can edit the dose or time, or remove a dose.
   When you stop taking a medication, mark it as stopped; your history is kept.
+  Starting, stopping or changing the dose of a medication (with the date it took effect) is recorded and marked 💊 on the pain chart.
 - **Home exercises**: save the exercises your physio gave you (sets/reps, times per day). Tap **+** after each session; an exercise is ticked ✓ when you reach the day's target. There is an optional note on how the exercises felt.
 - **Other symptoms**: tap chips such as numbness, tingling, leg weakness, cramps, pain below the knee or poor sleep, and add a free-text description (where, when, how long).
 - **Appointments**: physio, GP, specialist, imaging, injections and so on. Each one stores the provider, the treatment you received, homework exercises and notes.
   Every appointment also shows your average pain for the **3 days before and the 3 days after** it, so you can see whether a treatment helped.
-- **Overview**: a trend chart for 7, 30 or 90 days or all time, with appointments marked on it. You can switch between the daily average and morning, afternoon or evening only.
+- **Overview**: a trend chart for 7, 30 or 90 days or all time, with appointments 🗓 and medication changes 💊 marked on it, a sleep bar chart lined up underneath, and a list of events in the period. You can switch between the daily average and morning, afternoon or evening only.
   It also shows the period average compared with the previous period, averages by time of day, and a daily heatmap (including exercise and medication rows).
   There are also summaries of medication use, how well you kept up with your exercises, and how often each symptom appeared.
 - **Settings**: manage your medication and exercise lists, JSON backup and restore, CSV export (for Excel or Sheets), and a print/PDF report for your doctor.
