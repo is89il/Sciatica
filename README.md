@@ -7,7 +7,7 @@ A small app for tracking sciatica and lower-back pain (L5/S1 herniation) through
 - **Log**: score pain from 0 to 10 for the **right leg**, **left leg** and **lower back**, three times a day:
   morning (after waking up), afternoon, and evening (before bed). Tap a number to set it and tap it again to clear it.
   "Same as morning" copies the previous scores. There is an optional note per time of day and one for the whole day.
-- **Sleep**: hours of night sleep (for the night before) and total naps, set with +/− buttons in 30-minute or 15-minute steps.
+- **Sleep**: hours of night sleep (for the night before) and total naps, set with +/− buttons in 15-minute steps.
 - **Medication**: save your medications once (name, usual dose, unit, schedule). After that, one tap logs a dose with the time. You can edit the dose or time, or remove a dose.
   When you stop taking a medication, mark it as stopped; your history is kept.
   Starting, stopping or changing the dose of a medication (with the date it took effect) is recorded and marked 💊 on the pain chart.

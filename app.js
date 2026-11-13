@@ -178,7 +178,7 @@ function renderLog() {
 
 /* ---------- Sleep (log) ---------- */
 const SLEEP = [
-  { id: 'night', name: 'Night sleep', hint: 'the night before this day', step: 0.5, start: 7, max: 16 },
+  { id: 'night', name: 'Night sleep', hint: 'the night before this day', step: 0.25, start: 7, max: 16 },
   { id: 'nap', name: 'Naps', hint: 'total during the day', step: 0.25, start: 0.5, max: 8 },
 ];
 const fmtHours = (h) => {
