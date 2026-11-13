@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION when files change.
-const VERSION = 'pain-tracker-v4';
+const VERSION = 'pain-tracker-v5';
 const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'game.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
