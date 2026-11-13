@@ -34,6 +34,16 @@ const fmt = (v) => (v == null ? '–' : v.toFixed(1));
 const painColor = (v) => `hsl(${120 - v * 12} 70% ${v >= 7 ? 40 : 42}%)`;
 const fmtDate = (iso, opts = { weekday: 'short', day: 'numeric', month: 'short' }) =>
   fromISO(iso).toLocaleDateString(undefined, opts);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+// "13th Nov 2026"
+const fmtLong = (iso) => { const d = fromISO(iso); return `${ordinal(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+// "Today" / "Yesterday" / "Wednesday"
+const dayName = (iso) => {
+  const diff = daysBetween(iso, todayISO());
+  return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : diff === -1 ? 'Tomorrow' : WEEKDAYS[fromISO(iso).getDay()];
+};
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* ---------- Storage ---------- */
@@ -125,13 +135,17 @@ const slotSummary = (sv) => AREAS.map((a) => `<span class="mini" style="--c:${a.
 
 function renderLog() {
   dateInput.value = currentDate;
+  dateInput.max = todayISO();
+  $('#log-date-main').textContent = dayName(currentDate);
+  $('#log-date-sub').textContent = fmtLong(currentDate);
+  $('#jump-today-wrap').classList.toggle('show', currentDate !== todayISO());
   $('#next-day').disabled = currentDate >= todayISO();
   const entry = getEntry(currentDate) || {};
 
   // appointments of the day
   const appts = data.appointments.filter((a) => a.date === currentDate);
   $('#day-appts').innerHTML = appts
-    .map((a) => `<div class="appt-chip" data-id="${a.id}"><span>🗓</span><div><div class="t">${esc(a.type)}${a.time ? ' · ' + esc(a.time) : ''}</div><div class="muted small">${esc(a.provider || '')}${a.treatment ? ' — ' + esc(a.treatment.slice(0, 80)) : ''}</div></div></div>`)
+    .map((a) => `<div class="appt-chip" data-id="${a.id}"><span>🗓</span><div><div class="t">${esc(a.type)}${a.time ? ' · ' + esc(a.time) : ''}</div><div class="muted small">${esc(a.provider || '')}${a.treatment ? ' — ' + esc(a.treatment.slice(0, 80)) : ''}</div>${txTags(a)}</div></div>`)
     .join('') +
     `<div class="row"><button class="wide" id="log-add-appt">+ Add appointment on this day</button></div>`;
   $$('#day-appts .appt-chip').forEach((el) => el.addEventListener('click', () => openAppt(el.dataset.id)));
@@ -498,7 +512,9 @@ $('#day-note').addEventListener('input', (ev) => {
   pruneEntry(currentDate);
   save();
 });
-dateInput.addEventListener('change', () => { if (dateInput.value) { currentDate = dateInput.value; renderLog(); } });
+dateInput.addEventListener('change', () => { if (dateInput.value) { currentDate = dateInput.value > todayISO() ? todayISO() : dateInput.value; renderLog(); } });
+dateInput.addEventListener('click', () => { try { dateInput.showPicker(); } catch (e) { /* older browsers open it themselves */ } });
+$('#jump-today').addEventListener('click', () => { currentDate = todayISO(); renderLog(); });
 $('#prev-day').addEventListener('click', () => { currentDate = addDays(currentDate, -1); renderLog(); });
 $('#next-day').addEventListener('click', () => { if (currentDate < todayISO()) { currentDate = addDays(currentDate, 1); renderLog(); } });
 
@@ -803,8 +819,9 @@ function renderAppointments() {
     const ctxHtml = a.date <= today && (ctx.before != null || ctx.after != null)
       ? `<div class="pain-ctx">Avg pain 3 days before: <b>${fmt(ctx.before)}</b> → 3 days after: <b>${fmt(ctx.after)}</b></div>` : '';
     html += `<div class="card appt" data-id="${a.id}">
-      <div class="top"><span class="type">${esc(a.type)}</span><span class="when">${fmtDate(a.date)}${a.time ? ' · ' + esc(a.time) : ''}</span></div>
+      <div class="top"><span class="type">${esc(a.type)}</span><span class="when">${fmtLong(a.date)}${a.time ? ' · ' + esc(a.time) : ''}</span></div>
       ${a.provider ? `<div class="muted">${esc(a.provider)}</div>` : ''}
+      ${txTags(a)}
       ${a.treatment ? `<p><span class="k">Treatment</span><br>${esc(a.treatment)}</p>` : ''}
       ${a.homework ? `<p><span class="k">Homework</span><br>${esc(a.homework)}</p>` : ''}
       ${a.notes ? `<p><span class="k">Notes</span><br>${esc(a.notes)}</p>` : ''}
@@ -815,6 +832,20 @@ function renderAppointments() {
   $$('#appt-list .appt').forEach((el) => el.addEventListener('click', () => openAppt(el.dataset.id)));
 }
 
+const TREATMENTS = [
+  'Manual therapy', 'Dry needling', 'Acupuncture', 'Massage / relaxation', 'Exercise therapy',
+  'Mobilisation / manipulation', 'Nerve mobilisation', 'Heat / TENS', 'Taping', 'Advice / education',
+];
+const txTags = (a) => (a.treatments?.length ? `<div class="tx-tags">${a.treatments.map((t) => `<span class="tx-tag">${esc(t)}</span>`).join('')}</div>` : '');
+let apptTx = new Set();
+function renderTxChips() {
+  $('#appt-tx').innerHTML = TREATMENTS.map((t) => `<button type="button" class="chip ${apptTx.has(t) ? 'on' : ''}" data-tx="${esc(t)}">${esc(t)}</button>`).join('');
+}
+$('#appt-tx').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-tx]'); if (!b) return;
+  apptTx.has(b.dataset.tx) ? apptTx.delete(b.dataset.tx) : apptTx.add(b.dataset.tx);
+  renderTxChips();
+});
 const dlg = $('#appt-dialog');
 const form = $('#appt-form');
 let editingId = null;
@@ -829,6 +860,8 @@ function openAppt(id, date) {
   for (const k of ['date', 'time', 'type', 'provider', 'treatment', 'homework', 'notes']) {
     if (form.elements[k]) form.elements[k].value = vals[k] || '';
   }
+  apptTx = new Set(a?.treatments || []);
+  renderTxChips();
   dlg.returnValue = '';
   dlg.showModal();
 }
@@ -841,6 +874,7 @@ dlg.addEventListener('close', () => {
     date: f.date.value, time: f.time.value, type: f.type.value,
     provider: f.provider.value.trim(), treatment: f.treatment.value.trim(),
     homework: f.homework.value.trim(), notes: f.notes.value.trim(),
+    treatments: TREATMENTS.filter((t) => apptTx.has(t)),
   };
   if (!rec.date) return;
   const i = data.appointments.findIndex((x) => x.id === rec.id);
@@ -877,7 +911,7 @@ $('#export-csv').addEventListener('click', () => {
   const exName = (id) => data.exercises.find((x) => x.id === id)?.name || id;
   Object.keys(data.entries).sort().forEach((d) => {
     const e = data.entries[d];
-    const appts = data.appointments.filter((a) => a.date === d).map((a) => `${a.type}${a.treatment ? ': ' + a.treatment : ''}`).join(' | ');
+    const appts = data.appointments.filter((a) => a.date === d).map((a) => `${a.type}${a.treatments?.length ? ' [' + a.treatments.join(', ') + ']' : ''}${a.treatment ? ': ' + a.treatment : ''}`).join(' | ');
     SLOTS.forEach((s) => {
       const v = e[s.id] || {};
       const meds = (e.meds || []).map((t) => `${t.time ? t.time + ' ' : ''}${t.name} ${[t.dose, t.unit].filter(Boolean).join(' ')}`.trim()).join(' | ');
