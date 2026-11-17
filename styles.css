@@ -309,3 +309,30 @@ dialog label.check input { width: auto; margin: 0; }
 .grid3 label { font-size: .85rem; color: var(--muted); }
 .grid3 input { margin-top: 4px; padding: 8px 6px; }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* ---------- Nombril brand ---------- */
+.logo { width: 30px; height: 30px; border-radius: 8px; align-self: center; }
+
+/* ---------- Walking ---------- */
+.trail, .trail-empty {
+  display: block; width: 100%; text-align: left; margin: 0 0 12px; padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent2) 40%, var(--line)); background: var(--card);
+}
+.trail-empty { display: flex; flex-direction: column; gap: 2px; border-style: dashed; }
+.tr-top, .tr-bot { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.tr-bot { font-size: .9rem; margin-top: 2px; }
+.trail-svg { width: 100%; height: 46px; display: block; overflow: visible; }
+.walk-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.walk-row:first-of-type { border-top: none; }
+.walk-row > span { flex: 1; }
+.walk-row .x { padding: 4px 10px; }
+.add-walk { margin-top: 8px; }
+.tag-warn { font-size: .72rem; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--danger) 25%, var(--card)); }
+.walk-calc { margin: 8px 0 2px; font-weight: 700; color: var(--accent2); min-height: 1.2em; }
+#walk-form .chips { margin-bottom: 6px; }
+#walk-form input[name=min] { margin-top: 2px; }
+.grid-icon { display: grid; grid-template-columns: 70px 1fr; gap: 10px; }
+.grid-icon input[name=icon] { text-align: center; font-size: 1.2rem; }
+.freq { display: grid; grid-template-columns: 80px auto 1fr; gap: 8px; align-items: center; }
+.freq span { color: var(--muted); }
+.ex-row .ok { color: var(--good); font-weight: 600; }

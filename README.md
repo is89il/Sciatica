@@ -1,4 +1,6 @@
-# Pain Tracker
+# Nombril
+
+*Strong core, long trail.* Named after the French word for navel: my manual therapist's cue for a strong core (navel in!).
 
 A small app for tracking sciatica and lower-back pain (L5/S1 herniation) through the day, along with physiotherapy and doctor appointments.
 
@@ -8,10 +10,13 @@ A small app for tracking sciatica and lower-back pain (L5/S1 herniation) through
   morning (after waking up), afternoon, and evening (before bed). Tap a number to set it and tap it again to clear it.
   "Same as morning" copies the previous scores. There is an optional note per time of day and one for the whole day.
 - **Sleep**: hours of night sleep (for the night before) and total naps, set with +/− buttons in 15-minute steps.
+- **Walks**: log each walk's minutes plus either your speed (slow / easy / normal / brisk) or the distance; the app works out the km. You can also mark walks you had to stop or shorten because of pain.
+- **Walking goal**: pick a ready-made route or make your own (name, km, target date, landmarks). Real walks, plus a small bonus for check-ins (100 m) and exercise sessions (50 m), move you along the trail, with a celebration at every landmark.
+  Ready-made routes (distances approximate and editable): Amersfoort old town loop, Amersfoort → Spakenburg, Paleis Soestdijk, Pyramide van Austerlitz and Utrecht Domtoren, the Pieterpad, three Camino routes (last 100 km from Sarria, the Portugués from Porto, the full Francés), and the Tongariro Alpine Crossing.
 - **Medication**: save your medications once (name, usual dose, unit, schedule). After that, one tap logs a dose with the time. You can edit the dose or time, or remove a dose.
   When you stop taking a medication, mark it as stopped; your history is kept.
   Starting, stopping or changing the dose of a medication (with the date it took effect) is recorded and marked 💊 on the pain chart.
-- **Home exercises**: save the exercises your physio gave you (sets/reps, times per day). Tap **+** after each session; an exercise is ticked ✓ when you reach the day's target. There is an optional note on how the exercises felt.
+- **Home exercises**: save the exercises your physio gave you (sets/reps, and how often: per day, week or month). Tap **+** after each session; an exercise is ticked ✓ when you reach the day's target. There is an optional note on how the exercises felt.
 - **Other symptoms**: tap chips such as numbness, tingling, leg weakness, cramps, pain below the knee or poor sleep, and add a free-text description (where, when, how long).
 - **Appointments**: physio, GP, specialist, imaging, injections and so on. Each one stores the provider, the treatment you received, homework exercises and notes.
   Every appointment also shows your average pain for the **3 days before and the 3 days after** it, so you can see whether a treatment helped.

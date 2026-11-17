@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Pain Tracker",
-  "short_name": "Pain Tracker",
-  "description": "Track sciatica and back pain through the day, plus physio and doctor appointments.",
+  "name": "Nombril",
+  "short_name": "Nombril",
+  "description": "Strong core, long trail: track sciatica pain, sleep, exercises, walks and care, and walk towards your goal.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
