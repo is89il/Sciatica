@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Nombril",
+  "short_name": "Nombril",
+  "description": "Strong core, long trail: track sciatica pain, sleep, exercises, walks and care, and walk towards your goal.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14111b",
+  "theme_color": "#14111b",
+  "icons": [
+    { "src": "nombril-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "nombril-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "nombril-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "nombril.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

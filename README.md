@@ -56,4 +56,4 @@ Once installed it works offline. On iOS, use the installed home-screen app rathe
 | `app.js` | Main logic: storage, logging, charts, appointments, export, reminders |
 | `game.js` | Streaks, XP, badges, celebrations |
 | `sw.js` | Offline cache (bump `VERSION` after changes) |
-| `manifest.webmanifest`, `icon.svg` | Installable app metadata |
+| `nombril.webmanifest`, `nombril.svg` (+ PNG icons) | Installable app metadata |
