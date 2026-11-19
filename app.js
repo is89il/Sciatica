@@ -1,7 +1,8 @@
 'use strict';
 
 /* ---------- Config ---------- */
-const STORAGE_KEY = 'paintracker.v1';
+const STORAGE_KEY = 'paintracker.v1'; // keep: renaming this would hide existing data
+const APP_VERSION = 9; // keep in sync with VERSION in sw.js
 const SLOTS = [
   { id: 'morning', name: 'Morning', hint: 'after waking up', icon: '🌅' },
   { id: 'afternoon', name: 'Afternoon', hint: 'midday', icon: '☀️' },
@@ -1040,8 +1041,20 @@ document.addEventListener('DOMContentLoaded', () => {
   checkBadges(); // first run marks already-earned badges as seen
 });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // updateViaCache 'none': always fetch a fresh sw.js, so new versions are noticed straight away
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+  }).catch(() => {});
+  // when a new version takes over, reload once so the new files are used
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
 }
+$('#app-version').textContent = `Nombril version ${APP_VERSION}`;
 let resizeT;
 window.addEventListener('resize', () => {
   clearTimeout(resizeT);
