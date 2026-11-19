@@ -2,7 +2,7 @@
 
 /* ---------- Config ---------- */
 const STORAGE_KEY = 'paintracker.v1'; // keep: renaming this would hide existing data
-const APP_VERSION = 9; // keep in sync with VERSION in sw.js
+const APP_VERSION = 10; // keep in sync with VERSION in sw.js
 const SLOTS = [
   { id: 'morning', name: 'Morning', hint: 'after waking up', icon: '🌅' },
   { id: 'afternoon', name: 'Afternoon', hint: 'midday', icon: '☀️' },

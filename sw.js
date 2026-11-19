@@ -1,6 +1,6 @@
 // Offline cache for the app shell. Bump VERSION (and APP_VERSION in app.js) when files change.
-const VERSION = 'nombril-v9';
-const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'game.js', 'walk.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+const VERSION = 'nombril-v10';
+const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'game.js', 'walk.js', 'nombril.webmanifest', 'nombril.svg', 'nombril-192.png', 'nombril-512.png', 'nombril-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
   // cache: 'reload' skips the browser's HTTP cache so we never store stale files
