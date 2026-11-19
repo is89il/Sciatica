@@ -97,6 +97,7 @@ function pruneEntry(date) {
     if (!Object.keys(e.exercises).length) delete e.exercises;
   }
   if (e.symptoms && !e.symptoms.length) delete e.symptoms;
+  if (e.walks && !e.walks.length) delete e.walks;
   if (e.sleep && e.sleep.night == null && e.sleep.nap == null) delete e.sleep;
   for (const k of ['exNote', 'symptomNote']) if (k in e && !e[k]) delete e[k];
   const keys = Object.keys(e).filter((k) => k !== 'note');
@@ -186,6 +187,8 @@ function renderLog() {
   $('#day-note').value = entry.note || '';
   renderSleepCard(entry);
   renderMedsCard(entry);
+  renderTrailCard();
+  renderWalkCard(entry);
   renderExCard(entry);
   renderSymCard(entry);
 }
@@ -264,6 +267,19 @@ $('#meds-card').addEventListener('change', (ev) => {
 });
 
 /* ---------- Exercises (log) ---------- */
+// date range of the day / week (Mon–Sun) / month that contains `date`
+function periodRange(per, date) {
+  if (per === 'week') { const dow = (fromISO(date).getDay() + 6) % 7; const s = addDays(date, -dow); return [s, addDays(s, 6)]; }
+  if (per === 'month') { const d = fromISO(date); return [toISO(new Date(d.getFullYear(), d.getMonth(), 1)), toISO(new Date(d.getFullYear(), d.getMonth() + 1, 0))]; }
+  return [date, date];
+}
+function periodCount(exId, per, date) {
+  const [s, e] = periodRange(per, date);
+  let n = 0;
+  for (const [d, en] of Object.entries(data.entries)) if (d >= s && d <= e) n += en.exercises?.[exId] || 0;
+  return n;
+}
+const PERIOD_DAYS = { day: 1, week: 7, month: 30.44 };
 function renderExCard(entry) {
   const done = entry.exercises || {};
   // show active exercises + any retired ones that were done on this day
@@ -271,9 +287,13 @@ function renderExCard(entry) {
   $('#ex-card').innerHTML = `<div class="slot-head"><h3>🏃 Home exercises</h3><button class="copy-prev" data-newex>+ New</button></div>
     ${list.length ? list.map((x) => {
       const n = done[x.id] || 0; const target = Number(x.target) || 1;
-      return `<div class="ex-row ${n >= target ? 'done' : ''}" data-ex="${x.id}">
-        <div class="info"><b>${esc(x.name)}</b><div class="muted">${esc(x.detail || '')}${x.target ? `${x.detail ? ' · ' : ''}${x.target}× per day` : ''}</div></div>
-        <div class="counter"><button data-d="-1" aria-label="Less">−</button><span>${n}${x.target ? '/' + x.target : ''}</span><button data-d="1" aria-label="More">+</button></div>
+      const per = x.period || 'day';
+      const inPeriod = per === 'day' ? n : periodCount(x.id, per, currentDate);
+      const freq = x.target ? `${x.target}× per ${per}` : '';
+      const status = per !== 'day' && x.target ? `<div class="small ${inPeriod >= target ? 'ok' : 'muted'}">this ${per}: ${inPeriod}/${x.target}${inPeriod >= target ? ' ✓' : ''}</div>` : '';
+      return `<div class="ex-row ${inPeriod >= target ? 'done' : ''}" data-ex="${x.id}">
+        <div class="info"><b>${esc(x.name)}</b><div class="muted">${esc(x.detail || '')}${freq ? `${x.detail ? ' · ' : ''}${freq}` : ''}</div>${status}</div>
+        <div class="counter"><button data-d="-1" aria-label="Less">−</button><span>${n}${x.target && per === 'day' ? '/' + x.target : ''}</span><button data-d="1" aria-label="More">+</button></div>
       </div>`;
     }).join('') : '<div class="empty-sm">Add the exercises your physio gave you, then tap + each time you do a session.</div>'}
     <div class="slot-note"><textarea rows="1" placeholder="How did the exercises feel? (optional)" data-exnote>${esc(entry.exNote || '')}</textarea></div>`;
@@ -437,6 +457,7 @@ function openEx(id) {
   $('#ex-dialog-title').textContent = id ? 'Edit exercise' : 'New home exercise';
   $('#ex-delete').style.display = id ? '' : 'none';
   for (const k of ['name', 'detail', 'target', 'notes']) exForm.elements[k].value = x[k] || '';
+  exForm.elements.period.value = x.period || 'day';
   exForm.elements.active.checked = x.active !== false;
   exDlg.returnValue = '';
   exDlg.showModal();
@@ -444,7 +465,7 @@ function openEx(id) {
 exDlg.addEventListener('close', () => {
   if (exDlg.returnValue !== 'save') return;
   const f = exForm.elements;
-  const rec = { id: editingEx || uid(), name: f.name.value.trim(), detail: f.detail.value.trim(), target: f.target.value ? Number(f.target.value) : '', notes: f.notes.value.trim(), active: f.active.checked };
+  const rec = { id: editingEx || uid(), name: f.name.value.trim(), detail: f.detail.value.trim(), target: f.target.value ? Number(f.target.value) : '', period: f.period.value, notes: f.notes.value.trim(), active: f.active.checked };
   if (!rec.name) return;
   const i = data.exercises.findIndex((x) => x.id === rec.id);
   if (i >= 0) data.exercises[i] = rec; else data.exercises.push(rec);
@@ -466,7 +487,7 @@ function renderManageLists() {
       <div><b>${esc(m.name)}</b> ${esc(doseLabel(m))}<div class="muted">${esc(m.schedule || '')}${m.active === false ? ' (stopped)' : ''}</div></div><span class="muted">Edit ›</span></div>`).join('')
     : '<div class="empty-sm">No medications yet.</div>';
   $('#ex-list').innerHTML = data.exercises.length ? [...data.exercises].sort(sortActive).map((x) => `<div class="list-item ${x.active === false ? 'inactive' : ''}" data-id="${x.id}">
-      <div><b>${esc(x.name)}</b> <span class="muted">${esc(x.detail || '')}${x.target ? ' · ' + x.target + '×/day' : ''}</span><div class="muted">${esc(x.notes || '')}${x.active === false ? ' (retired)' : ''}</div></div><span class="muted">Edit ›</span></div>`).join('')
+      <div><b>${esc(x.name)}</b> <span class="muted">${esc(x.detail || '')}${x.target ? ' · ' + x.target + '×/' + (x.period || 'day') : ''}</span><div class="muted">${esc(x.notes || '')}${x.active === false ? ' (retired)' : ''}</div></div><span class="muted">Edit ›</span></div>`).join('')
     : '<div class="empty-sm">No exercises yet.</div>';
 }
 $('#med-list').addEventListener('click', (ev) => { const r = ev.target.closest('[data-id]'); if (r) openMed(r.dataset.id); });
@@ -575,6 +596,7 @@ function renderOverview() {
   renderChart(dates);
   renderStats(dates);
   renderSlotTable(dates);
+  renderWalkOverview(dates);
   renderSleepOverview(dates);
   renderMedsOverview(dates);
   renderExOverview(dates);
@@ -627,10 +649,12 @@ function renderExOverview(dates) {
     const days = counts.filter(Boolean).length;
     const sessions = counts.reduce((a, b) => a + b, 0);
     const target = Number(x.target) || 0;
-    const pct = target ? Math.min(100, (sessions / (target * n)) * 100) : (days / n) * 100;
+    const per = x.period || 'day';
+    const expected = target * n / PERIOD_DAYS[per];
+    const pct = target ? Math.min(100, (sessions / expected) * 100) : (days / n) * 100;
     return `<div class="ov-row">
       <div class="top"><b>${esc(x.name)}</b><span class="muted">${days} of ${n} days</span></div>
-      <div class="muted small">${sessions} session${sessions === 1 ? '' : 's'}${target ? ` · ${Math.round(pct)}% of target (${target}×/day)` : ''}</div>
+      <div class="muted small">${sessions} session${sessions === 1 ? '' : 's'}${target ? ` · ${Math.round(pct)}% of target (${target}×/${per})` : ''}</div>
       <div class="bar"><i style="width:${pct}%;background:var(--good)"></i></div></div>`;
   }).join('') : '<div class="empty-sm">No exercises set up yet. Add them in Settings or on the Log page.</div>';
 }
@@ -784,15 +808,19 @@ function renderHeatmap(dates) {
   <div>Exercises</div><div class="hm-row" style="${cols}">${dates.map((d) => {
     const ex = data.entries[d]?.exercises || {};
     const sessions = Object.values(ex).reduce((a, b) => a + b, 0);
-    const target = data.exercises.filter((x) => x.active !== false).reduce((a, x) => a + (Number(x.target) || 1), 0) || 1;
+    const target = data.exercises.filter((x) => x.active !== false && (x.period || 'day') === 'day').reduce((a, x) => a + (Number(x.target) || 1), 0) || 1;
     const r = Math.min(1, sessions / target);
     return `<div class="hm-cell" title="${fmtDate(d)}: ${sessions} exercise session(s)" style="${sessions ? `background:color-mix(in srgb, var(--good) ${30 + r * 70}%, var(--line))` : ''}"></div>`;
+  }).join('')}</div>
+  <div>Walking</div><div class="hm-row" style="${cols}">${dates.map((d) => {
+    const min = (data.entries[d]?.walks || []).reduce((a, w) => a + (Number(w.min) || 0), 0);
+    return `<div class="hm-cell" title="${fmtDate(d)}: ${min} min walked" style="${min ? `background:color-mix(in srgb, var(--accent2) ${30 + Math.min(min, 60) / 60 * 70}%, var(--line))` : ''}"></div>`;
   }).join('')}</div>
   <div>Medication</div><div class="hm-row" style="${cols}">${dates.map((d) => {
     const c = (data.entries[d]?.meds || []).length;
     return `<div class="hm-cell" title="${fmtDate(d)}: ${c} dose(s)" style="${c ? `background:color-mix(in srgb, var(--med) ${30 + Math.min(c, 5) * 14}%, var(--line))` : ''}"></div>`;
   }).join('')}</div></div>
-  <p class="muted small">Pain: green = low, red = high. Outlined squares are appointment days. Exercises: brighter green = closer to your daily target. Medication: brighter yellow = more doses.</p>`;
+  <p class="muted small">Pain: green = low, red = high. Outlined squares are appointment days. Exercises: brighter green = closer to your daily target. Walking: brighter orange = longer walks. Medication: brighter yellow = more doses.</p>`;
 }
 
 /* ---------- Appointments ---------- */
@@ -904,10 +932,10 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 $('#export-json').addEventListener('click', () =>
-  download(`pain-tracker-backup-${todayISO()}.json`, JSON.stringify(data, null, 2), 'application/json'));
+  download(`nombril-backup-${todayISO()}.json`, JSON.stringify(data, null, 2), 'application/json'));
 $('#export-csv').addEventListener('click', () => {
   const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const lines = ['date,time_of_day,right_leg,left_leg,lower_back,slot_note,day_note,appointments,medication,exercises,exercise_note,symptoms,symptom_note,sleep_night_h,naps_h'];
+  const lines = ['date,time_of_day,right_leg,left_leg,lower_back,slot_note,day_note,appointments,medication,exercises,exercise_note,symptoms,symptom_note,sleep_night_h,naps_h,walk_minutes,walk_km,walks_stopped_by_pain'];
   const exName = (id) => data.exercises.find((x) => x.id === id)?.name || id;
   Object.keys(data.entries).sort().forEach((d) => {
     const e = data.entries[d];
@@ -916,7 +944,8 @@ $('#export-csv').addEventListener('click', () => {
       const v = e[s.id] || {};
       const meds = (e.meds || []).map((t) => `${t.time ? t.time + ' ' : ''}${t.name} ${[t.dose, t.unit].filter(Boolean).join(' ')}`.trim()).join(' | ');
       const ex = Object.entries(e.exercises || {}).map(([id, c]) => `${exName(id)} x${c}`).join(' | ');
-      lines.push([d, s.id, v.right ?? '', v.left ?? '', v.back ?? '', q(v.note), q(e.note), q(appts), q(meds), q(ex), q(e.exNote), q((e.symptoms || []).join(' | ')), q(e.symptomNote), e.sleep?.night ?? '', e.sleep?.nap ?? ''].join(','));
+      lines.push([d, s.id, v.right ?? '', v.left ?? '', v.back ?? '', q(v.note), q(e.note), q(appts), q(meds), q(ex), q(e.exNote), q((e.symptoms || []).join(' | ')), q(e.symptomNote), e.sleep?.night ?? '', e.sleep?.nap ?? '',
+        (e.walks || []).reduce((a, w) => a + w.min, 0) || '', (e.walks || []).length ? (e.walks.reduce((a, w) => a + walkKm(w), 0)).toFixed(2) : '', (e.walks || []).filter((w) => w.stopped).length || ''].join(','));
     });
   });
   download(`pain-log-${todayISO()}.csv`, lines.join('\n'), 'text/csv');
@@ -932,7 +961,7 @@ $('#import-json').addEventListener('change', async (ev) => {
     save();
     alert('Backup restored.');
   } catch (e) {
-    alert('Could not read that file. Is it a Pain Tracker backup?');
+    alert('Could not read that file. Is it a Nombril backup?');
   } finally {
     ev.target.value = '';
   }
@@ -972,13 +1001,13 @@ function buildICS() {
   const appUrl = location.href.split('#')[0].split('?')[0];
   const start = todayISO().replace(/-/g, '');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pain Tracker//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Nombril//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
   for (const s of SLOTS) {
     const t = ($(`#rem-${s.id}`).value || '08:00').replace(':', '');
     lines.push('BEGIN:VEVENT',
-      `UID:paintracker-${s.id}-${start}@local`, `DTSTAMP:${stamp}`,
+      `UID:nombril-${s.id}-${start}@local`, `DTSTAMP:${stamp}`,
       `DTSTART:${start}T${t}00`, 'DURATION:PT5M', 'RRULE:FREQ=DAILY',
-      `SUMMARY:${s.icon} Pain check-in (${s.name.toLowerCase()})`,
+      `SUMMARY:${s.icon} Nombril check-in (${s.name.toLowerCase()})`,
       `DESCRIPTION:3 taps: right leg\\, left leg\\, back. Keep your streak going! ${appUrl}`,
       `URL:${appUrl}`, 'TRANSP:TRANSPARENT',
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${s.name} pain check-in`, 'TRIGGER:PT0M', 'END:VALARM',
@@ -987,7 +1016,7 @@ function buildICS() {
   lines.push('END:VCALENDAR');
   return lines.join('\r\n');
 }
-$('#add-reminders').addEventListener('click', () => download('pain-tracker-reminders.ics', buildICS(), 'text/calendar'));
+$('#add-reminders').addEventListener('click', () => download('nombril-reminders.ics', buildICS(), 'text/calendar'));
 
 /* ---------- Theme ---------- */
 function applyTheme(t) {
@@ -1005,8 +1034,11 @@ applyTheme((() => { try { return localStorage.getItem('paintracker.theme') || 'd
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && $('#view-log').classList.contains('active')) renderLog();
 });
-renderLog();
-checkBadges(); // first run marks already-earned badges as seen
+// start once every script (game.js, app.js, walk.js) has loaded
+document.addEventListener('DOMContentLoaded', () => {
+  renderLog();
+  checkBadges(); // first run marks already-earned badges as seen
+});
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

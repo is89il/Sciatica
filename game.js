@@ -28,6 +28,7 @@ function slotComplete(d, slot) {
 
 function gameStats() {
   const days = Object.keys(data.entries).filter((d) => d <= todayISO()).sort();
+  let walkKmTotal = 0, walkCount = 0;
   let xp = 0, checkins = 0, fullDays = 0, mornings = 0, sleepNights = 0, exSessions = 0, comeback = false;
   let best = 0, run = 0, prev = null, perfectRun = 0, bestPerfect = 0;
   for (const d of days) {
@@ -39,10 +40,12 @@ function gameStats() {
     if (e.sleep && (e.sleep.night != null || e.sleep.nap != null)) { sleepNights++; xp += 5; }
     for (const [id, n] of Object.entries(e.exercises || {})) {
       const ex = data.exercises.find((x) => x.id === id);
-      const capped = Math.min(n, Number(ex?.target) || 3); // no extra points for overdoing it
+      const capped = Math.min(n, (ex?.period || 'day') === 'day' ? Number(ex?.target) || 3 : 1); // no extra points for overdoing it
       exSessions += n; xp += capped * 3;
     }
     if (e.symptoms?.length || e.symptomNote) xp += 2;
+    for (const w of (e.walks || []).slice(0, 3)) { xp += 5; walkKmTotal += walkKm(w); } // up to 3 walks a day
+    walkCount += (e.walks || []).length;
     if (c) {
       const gap = prev ? daysBetween(prev, d) : 1;
       if (gap > 3) comeback = true;
@@ -66,7 +69,7 @@ function gameStats() {
     xp, level, title: LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)],
     levelFrom: xpForLevel(level), levelTo: xpForLevel(level + 1),
     streak, best: Math.max(best, streak), checkins, fullDays, mornings, sleepNights, exSessions,
-    bestPerfect, comeback, appts: data.appointments.length, today: checkinsOn(todayISO()),
+    bestPerfect, comeback, walkKmTotal, walkCount, appts: data.appointments.length, today: checkinsOn(todayISO()),
   };
 }
 
@@ -80,10 +83,14 @@ const BADGES = [
   { id: 'perfect7', icon: '💎', name: 'Perfect week', desc: '7 days in a row with all 3 check-ins', test: (s) => s.bestPerfect >= 7 },
   { id: 'early', icon: '🌅', name: 'Early bird', desc: '10 morning check-ins', test: (s) => s.mornings >= 10 },
   { id: 'c50', icon: '💯', name: 'Half century', desc: '50 check-ins', test: (s) => s.checkins >= 50 },
-  { id: 'c200', icon: '🏔️', name: 'Mountain of data', desc: '200 check-ins', test: (s) => s.checkins >= 200 },
+  { id: 'c200', icon: '📚', name: 'Mountain of data', desc: '200 check-ins', test: (s) => s.checkins >= 200 },
   { id: 'sleep7', icon: '😴', name: 'Sleep scientist', desc: 'Log sleep on 7 days', test: (s) => s.sleepNights >= 7 },
   { id: 'ex10', icon: '🏃', name: 'Moving it', desc: '10 exercise sessions', test: (s) => s.exSessions >= 10 },
   { id: 'ex50', icon: '🦾', name: 'Physio’s favourite', desc: '50 exercise sessions', test: (s) => s.exSessions >= 50 },
+  { id: 'walk1', icon: '👟', name: 'First steps', desc: 'Log your first walk', test: (s) => s.walkCount >= 1 },
+  { id: 'walk10', icon: '🥾', name: '10 km club', desc: 'Walk 10 km in total', test: (s) => s.walkKmTotal >= 10 },
+  { id: 'walk50', icon: '🗺️', name: 'Trailblazer', desc: 'Walk 50 km in total', test: (s) => s.walkKmTotal >= 50 },
+  { id: 'walk200', icon: '🏔️', name: 'Mountain legs', desc: 'Walk 200 km in total', test: (s) => s.walkKmTotal >= 200 },
   { id: 'appt', icon: '🗓', name: 'Care team', desc: 'Log an appointment', test: (s) => s.appts >= 1 },
   { id: 'comeback', icon: '💜', name: 'Comeback', desc: 'Pick it up again after a break. Every restart counts!', test: (s) => s.comeback },
 ];
@@ -123,7 +130,7 @@ function openAchievements() {
     </div>
     <h4>Badges · ${earned.size}/${BADGES.length}</h4>
     <div class="badges">${BADGES.map((b) => `<div class="badge ${earned.has(b.id) ? 'got' : ''}"><div class="bi">${b.icon}</div><b>${b.name}</b><span>${b.desc}</span></div>`).join('')}</div>
-    <p class="muted small">How to earn XP: 10 per check-in, +15 for a full day, 5 for logging sleep, 3 per exercise session (up to your daily target), 2 for noting symptoms, 10 per appointment. Taking medication never earns points.</p>`;
+    <p class="muted small">How to earn XP: 10 per check-in, +15 for a full day, 5 for logging sleep, 3 per exercise session (up to your daily target), 2 for noting symptoms, 10 per appointment, 5 per walk (up to 3 a day). Taking medication never earns points.</p>`;
   $('#ach-dialog').showModal();
 }
 
@@ -190,5 +197,6 @@ function checkBadges() {
     data.game.level = s.level;
     persist();
   }
+  if (typeof checkGoal === 'function') checkGoal();
   renderProgress();
 }
